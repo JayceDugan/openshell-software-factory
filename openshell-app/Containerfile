@@ -1,0 +1,20 @@
+# Base Go development image for the OpenShell SDK app.
+# Build:  podman build -t openshell-app .
+# Run:    podman run --rm -it -v $(pwd):/src openshell-app
+
+FROM docker.io/library/golang:1.24
+
+WORKDIR /src
+
+# Fetch the OpenShell Go SDK and all other module dependencies up front,
+# so builds inside the container are fast and reproducible.
+COPY go.mod go.sum* ./
+RUN go get github.com/NVIDIA/OpenShell/sdk/go@latest \
+    && go mod download
+
+# Copy application source (mount over /src when running interactively).
+COPY . .
+
+# Default to an interactive shell for development; override with a command,
+# e.g. podman run --rm openshell-app go build ./...
+CMD ["bash"]

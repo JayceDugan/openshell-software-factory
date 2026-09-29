@@ -1,0 +1,25 @@
+id: unsloth
+resource_version: 1
+display_name: Unsloth
+description: Direct Homelab Unsloth Access
+category: inference
+inference_capable: true
+credentials:
+  - name: api_key
+    description: Unsloth API Key
+    env_vars:
+      - UNSLOTH_API_KEY
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials:
+    - api_key
+endpoints:
+  - host: homelab
+    port: 8000
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries: [/usr/bin/curl, /usr/local/bin/curl, /usr/local/bin/node]
+

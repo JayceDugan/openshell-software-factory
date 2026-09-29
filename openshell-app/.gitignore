@@ -1,0 +1,10 @@
+# Binaries
+/app
+/bin/
+*.exe
+
+# Go workspace / editor files
+*.test
+*.out
+.idea/
+.vscode/

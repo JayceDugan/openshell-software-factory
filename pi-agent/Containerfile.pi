@@ -1,0 +1,22 @@
+FROM node:24-bookworm-slim
+
+ARG PI_VERSION=latest
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash ca-certificates fd-find git ripgrep vim curl \
+    && ln -s /usr/bin/fdfind /usr/local/bin/fd \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"
+
+RUN mkdir -p /sandbox/.pi
+
+COPY pi/ /sandbox/.pi/
+
+RUN chown -R node:node /sandbox
+
+USER node
+
+WORKDIR /sandbox
+
+ENV PI_CODING_AGENT_DIR=/sandbox/.pi
