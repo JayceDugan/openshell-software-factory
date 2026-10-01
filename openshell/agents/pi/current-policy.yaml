@@ -1,0 +1,30 @@
+Version:      2
+Hash:         638f396c6664eb1dc1772c8ddf50e3e8200f3460b002ff7cfb87be72d082ed09
+Status:       Effective
+Source:       sandbox
+Config rev:   7364698461033751817
+---
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /bin
+    - /usr
+    - /lib
+    - /proc
+    - /dev/urandom
+    - /etc
+    - /var/log
+  read_write:
+    - /tmp
+    - /dev/null
+landlock:
+  compatibility: best_effort
+network_policies:
+  allow_registry_npmjs_org_443:
+    name: allow_registry_npmjs_org_443
+    endpoints:
+      - host: registry.npmjs.org
+        port: 443
+    binaries:
+      - path: /usr/local/bin/node
