@@ -1,0 +1,7 @@
+{
+  "publicKey": "pk-lf-...",
+  "secretKey": "sk-lf-...",
+  "baseUrl": "https://cloud.langfuse.com",
+  "userId": "your-user-id",
+  "environment": "development"
+}
