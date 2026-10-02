@@ -7,7 +7,7 @@ PROVIDERS := $(addprefix update-,$(PROFILES))
 
 all: $(PROVIDERS)
 
-# make update-context7 | make update-unsloth | ...
+# make update-context7 | make update-unsloth | make langfuse...
 update-%: provider-%.yaml
 	$(OPENSELL) provider profile update $* -f $<
 

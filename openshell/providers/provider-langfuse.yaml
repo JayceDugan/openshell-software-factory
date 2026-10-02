@@ -1,0 +1,49 @@
+id: langfuse
+# Present on exported custom profiles; preserve it when updating.
+resource_version: 1
+display_name: Langfuse
+description: Langfuse LLM observability (traces, generations, tool calls) for agent sessions
+category: data
+inference_capable: false
+
+credentials:
+  - name: public_key
+    description: Langfuse public key (pk-lf-...)
+    env_vars: [LANGFUSE_PUBLIC_KEY]
+    required: true
+    # Langfuse's public API authenticates with HTTP Basic: pk:sk.
+    auth_style: basic
+    header_name: authorization
+
+  - name: secret_key
+    description: Langfuse secret key (sk-lf-...)
+    env_vars: [LANGFUSE_SECRET_KEY]
+    required: true
+    auth_style: basic
+    header_name: authorization
+
+  - name: base_url
+    description: Optional Langfuse host; falls back to https://cloud.langfuse.com
+    env_vars: [LANGFUSE_BASE_URL]
+    required: true
+
+  - name: user_id
+    description: Optional trace user id; max 200 characters
+    env_vars: [LANGFUSE_USER_ID]
+    required: false
+
+discovery:
+  credentials: [public_key, secret_key, base_url, user_id]
+
+endpoints:
+  - host: homelab
+    port: 3000
+    path: /api/public/**
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+    deny_rules:
+      - method: DELETE
+        path: /api/public/**
+
+binaries: [/usr/bin/curl, /usr/local/bin/curl, /usr/local/bin/node]
