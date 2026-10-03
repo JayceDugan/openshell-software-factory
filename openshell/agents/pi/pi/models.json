@@ -1,6 +1,6 @@
 {
   "providers": {
-    "unsloth": {
+    "bifrost": {
       "baseUrl": "http://homelab:8080/v1",
       "api": "openai-completions",
       "apiKey": "unused",
