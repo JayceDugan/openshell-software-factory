@@ -14,7 +14,7 @@ RUN npm install -g npm@latest
 RUN mkdir -p /sandbox/.pi
 COPY pi/ /sandbox/.pi/
 
-RUN pi install npm:@langfuse/pi-observability-plugin
+#RUN pi install npm:pi-models-discovery
 
 RUN chown -R node:node /sandbox
 

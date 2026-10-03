@@ -27,13 +27,18 @@ credentials:
     env_vars: [LANGFUSE_BASE_URL]
     required: true
 
+  - name: host_url
+    description: Optional Langfuse host; falls back to https://cloud.langfuse.com
+    env_vars: [LANGFUSE_HOST_URL]
+    required: true
+
   - name: user_id
     description: Optional trace user id; max 200 characters
     env_vars: [LANGFUSE_USER_ID]
     required: false
 
 discovery:
-  credentials: [public_key, secret_key, base_url, user_id]
+  credentials: [public_key, secret_key, host_url, base_url, user_id]
 
 endpoints:
   - host: homelab

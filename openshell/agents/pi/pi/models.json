@@ -1,12 +1,12 @@
 {
   "providers": {
     "unsloth": {
-      "baseUrl": "http://homelab:8000/v1",
+      "baseUrl": "http://homelab:8080/v1",
       "api": "openai-completions",
-      "apiKey": "$UNSLOTH_API_KEY",
+      "apiKey": "unused",
+      "discoverModels": true,
       "models": [
-        { "id": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF:IQ3_XXS" },
-	{ "id": "ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF:IQ3_S" },
+        { "id": "Unsloth/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF" }
       ]
     }
   }
