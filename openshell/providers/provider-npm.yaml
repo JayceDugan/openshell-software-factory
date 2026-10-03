@@ -1,0 +1,20 @@
+id: npm
+resource_version: 1
+display_name: NPM
+description: npm Package registry 
+category: data
+inference_capable: false
+
+network_policies: 
+  npm_registry:
+    endpoints:
+      - host: registry.npm.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-only
+        allow_encoded_slash: true
+    binaries:
+      - path: /usr/bin/node
+      - path: /usr/local/bin/node
+      - path: /usr/bin/bash

@@ -6,7 +6,8 @@
       "apiKey": "unused",
       "discoverModels": true,
       "models": [
-        { "id": "Unsloth/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF" }
+        { "id": "ninfer/qwen3.8-27B-NVFP4" },
+        { "id": "Unsloth/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF" },
       ]
     }
   }

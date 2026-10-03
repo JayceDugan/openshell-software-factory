@@ -16,17 +16,3 @@ filesystem_policy:
 
 landlock:
   compatibility: hard_requirement
-
-network_policies:
-  npm_registry:
-    endpoints:
-      - host: registry.npmjs.org
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        access: read-only
-        allow_encoded_slash: true
-    binaries:
-      - path: /usr/bin/node
-      - path: /usr/local/bin/node
-      - path: /usr/bin/bash
