@@ -1,0 +1,12 @@
+{
+  "providers": {
+    "bifrost": {
+      "baseUrl": "http://homelab:8080/v1",
+      "api": "openai-completions",
+      "apiKey": "unused",
+      "models": [
+        { "id": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF" }
+      ]
+    }
+  }
+}

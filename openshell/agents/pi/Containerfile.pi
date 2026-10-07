@@ -1,25 +1,26 @@
-FROM node:26.10-bookworm-slim
+ARG BASE_IMAGE=ghcr.io/nvidia/openshell-community/sandboxes/base:latest
+FROM ${BASE_IMAGE}
 
 ARG PI_VERSION=latest
 ENV PI_CODING_AGENT_DIR=/sandbox/.pi
 
+USER root
+
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash ca-certificates fd-find git ripgrep vim curl \
-    && ln -s /usr/bin/fdfind /usr/local/bin/fd \
-    && rm -rf /var/lib/apt/lists/*
+	&& apt-get install -y --no-install-recommends bash ca-certificates fd-find git ripgrep vim curl \
+	&& ln -s /usr/bin/fdfind /usr/local/bin/fd \
+	&& rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"
-RUN npm install -g npm@latest
 
 RUN mkdir -p /sandbox/.pi
-COPY pi/ /sandbox/.pi/
+COPY agent-config/ /sandbox/.pi/
 
-#RUN pi install npm:pi-models-discovery
+# Pi packages
+#RUN pi install npm:pi-langfuse
 
-RUN chown -R node:node /sandbox
+RUN chown -R sandbox:sandbox /sandbox/.pi
 
 COPY policy.yaml /etc/openshell/policy.yaml
 
-USER node
-WORKDIR /sandbox
-
+USER sandbox

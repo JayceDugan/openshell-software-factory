@@ -1,0 +1,27 @@
+ARG BASE_IMAGE=ghcr.io/nvidia/openshell-community/sandboxes/base:latest
+FROM ${BASE_IMAGE}
+
+ARG PI_VERSION=latest
+# ENV PI_CODING_AGENT_DIR=/sandbox/.pi
+
+USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash ca-certificates fd-find git ripgrep vim curl \
+    && ln -s /usr/bin/fdfind /usr/local/bin/fd \
+    && rm -rf /var/lib/apt/lists/*
+
+curl -fsSL https://omp.sh/install | sh
+
+#RUN mkdir -p /sandbox/.pi
+# COPY agent-config/ /sandbox/.pi/
+
+#RUN pi install npm:pi-models-discovery
+
+# RUN chown -R sandbox:sandbox /sandbox/.pi
+
+COPY policy.yaml /etc/openshell/policy.yaml
+
+USER sandbox
+#WORKDIR /sandbox
+

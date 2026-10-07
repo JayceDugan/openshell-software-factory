@@ -1,5 +1,5 @@
 id: bifrost
-resource_version: 1
+resource_version: 2
 display_name: bifrost
 description: BiFrost Inference Router
 category: inference
@@ -10,5 +10,5 @@ endpoints:
     protocol: rest
     access: read-write
     enforcement: enforce
-binaries: [/usr/bin/curl, /usr/local/bin/curl, /usr/local/bin/node]
+binaries: [/usr/bin/curl, /usr/local/bin/curl, /usr/local/bin/node, /usr/bin/node]
 
