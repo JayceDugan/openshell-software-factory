@@ -18,6 +18,7 @@ COPY agent-config/ /sandbox/.pi/
 
 # Pi packages
 #RUN pi install npm:pi-langfuse
+RUN pi install npm:@juicesharp/rpiv-ask-user-question
 
 RUN chown -R sandbox:sandbox /sandbox/.pi
 
