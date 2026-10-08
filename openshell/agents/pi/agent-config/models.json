@@ -5,7 +5,10 @@
       "api": "openai-completions",
       "apiKey": "unused",
       "models": [
-        { "id": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF" }
+        {
+          "id": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF",
+          "contextWindow": 180000
+        }
       ]
     }
   }
