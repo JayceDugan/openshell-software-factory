@@ -41,6 +41,12 @@ openshell sandbox delete <name>
 `launch.sh` passes `--no-keep` by default, so the sandbox is removed when the agent exits. Pass `--keep` to leave
 it running for inspection.
 
+When the agent exits, the `launch.sh` shim kills every other process in the sandbox (agent-browser, Chromium, omp's
+worker daemons). Without that, detached daemons keep the session's terminal open: `sandbox create` never returns, the
+terminal looks frozen after Ctrl-C, and `--no-keep` never deletes the sandbox. If you close the tab while the agent is
+still running, `launch.sh` catches the SIGHUP and deletes the sandbox itself. A sandbox launched *without* `launch.sh`
+can still linger; remove it with `openshell sandbox delete <name>`.
+
 ## Why was that denied?
 
 | Symptom | Likely cause | Fix |
@@ -58,6 +64,7 @@ it running for inspection.
 | `mount source does not exist` | `--mount` path is wrong | Use an absolute path, or `cd` there and omit `--mount` |
 | Bind mount ignored or rejected | Gateway opt-in missing | `enable_bind_mounts = true` and `allow_driver_config = true` under `[openshell.drivers.podman]` in `~/.config/openshell/gateway.toml` |
 | `provider create` rejects the type | Profile was never imported | `make -C providers update-<id>` |
+| Terminal frozen after Ctrl-C, sandbox left `Ready` | Launched without `launch.sh`'s shim, so a background daemon held the session open | `openshell sandbox delete <name>`, and launch through `launch.sh` |
 | `profile update` refused: stale `resource_version` | A raw `openshell profile update` was run with the file's old version | Use `make -C providers update-<id>`, which submits the gateway's current version |
 
 ## Before you commit a change

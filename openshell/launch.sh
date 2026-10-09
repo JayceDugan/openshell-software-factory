@@ -135,7 +135,18 @@ fi
 CMD+=(--)
 # OpenShell ignores the image WORKDIR and starts the agent in /sandbox (= $HOME); omp then
 # auto-switches to a temp dir. `sandbox create` has no --workdir, so cd via a tiny shim.
-CMD+=(sh -c 'cd /sandbox/work && exec "$@"' sh)
+# The shim does NOT exec: when the agent exits it kills everything else the sandbox user is
+# running. Detached daemons (agent-browser + Chromium) otherwise keep the session's terminal
+# open, so `sandbox create` never returns and --no-keep never deletes the sandbox.
+# `trap :` (not `trap ''`) keeps a stray SIGINT from killing the shim without the agent
+# inheriting an ignored SIGINT. `kill -1` is EPERM in OpenShell, so signal PIDs one by one,
+# skipping PID 1 (the supervisor) and the shim itself.
+CMD+=(sh -c 'cd /sandbox/work || exit 1
+trap : INT
+"$@"; rc=$?
+reap() { for p in $(ps -eo pid=); do [ "$p" -ne 1 ] && [ "$p" -ne $$ ] && kill -"$1" "$p"; done 2>/dev/null; }
+reap TERM; sleep 1; reap KILL
+exit $rc' sh)
 read -ra LAUNCH_ARRAY <<< "$LAUNCH_CMD"   # allows launch_cmd to be "pi" or "omp --profile review"
 CMD+=("${LAUNCH_ARRAY[@]}")
 [[ -n "${EXTRA_ARGS[*]:-}" ]] && CMD+=("${EXTRA_ARGS[@]}")   # bash 3.2: empty array is "unbound" under set -u
@@ -149,4 +160,10 @@ if [[ $DRY_RUN == 1 ]]; then
   exit 0
 fi
 
-exec "${CMD[@]}"
+# Closing the terminal tab SIGHUPs the CLI before its --no-keep delete runs, and the agent
+# keeps running in the sandbox (the main process outlives attachments), so the sandbox would
+# linger forever. Stay alive instead of exec'ing so a HUP can still delete it.
+if [[ -n "$KEEP_FLAG" ]]; then
+  trap 'openshell sandbox delete "$SANDBOX_NAME" >/dev/null 2>&1; exit 129' HUP
+fi
+"${CMD[@]}"
