@@ -38,7 +38,136 @@ in `provider-github.yaml.draft` but not applied yet.
 **Shared assets** (`openshell/shared/`): house rules (Context7 first, codemode), role files, Agent Skills (`web-dev`),
 and the headless browser layer.
 
-For the full architecture, the verified behavior, and known quirks, see [`openshell/DESIGN.md`](openshell/DESIGN.md).
+**Working in this codebase?** Guides for the common workflows are in [`openshell/docs/`](openshell/docs/README.md):
+[providers](openshell/docs/providers.md), including profiles vs providers;
+[personas](openshell/docs/personas.md); [roles and skills](openshell/docs/roles-and-skills.md);
+[policies](openshell/docs/policies.md); [harnesses](openshell/docs/harnesses.md); [models](openshell/docs/models.md);
+and [running and debugging](openshell/docs/running-and-debugging.md). For what has been verified end to end and the
+harness quirks, see [`openshell/DESIGN.md`](openshell/DESIGN.md).
+
+## How the fleet is composed
+
+The goal is many agents from few images, with fast spin-up. A Containerfile per agent would mix several things
+that change independently, so each one gets its own axis instead:
+
+```
+HARNESS   = the coding-agent CLI in the image              pi, omp  (later: claude, codex, opencode)
+ROLE      = the job: what the agent is told to do           general-dev, web-dev, pr-reviewer, planner
+SKILLS    = reusable know-how the agent loads on demand     web-dev, agent-browser
+POLICY    = the filesystem boundary, chosen by role         dev.yaml, review.yaml, strict.yaml
+PROVIDERS = network + credential grants, fleet-wide         bifrost, context7, npm, ...
+PERSONA   = harness + role + skills + config payload        pi-web-dev, omp-web-dev, pi-pr-reviewer, ...
+```
+
+**A persona is the only per-agent thing.** It picks one value from each of the other axes. All of those values
+are shared, so adding an agent mostly means choosing values that already exist.
+
+```
+                 ┌──────────── shared/instructions/house-rules.md ─┐
+                 │  + shared/instructions/roles/web-dev.md         │──► AGENTS.md
+                 └─────────────────────────────────────────────────┘
+openshell-pi-harness:local ──► personas/pi-web-dev ──► image pi-web-dev:local
+  (pi CLI, built once)          ├─ payload/ (pi config: settings.json, models.json, mcp.json)
+                                ├─ shared/skills/      ──► /sandbox/agent/skills/
+                                └─ persona.json        ──► policy dev.yaml + providers [bifrost, context7, npm, ...]
+```
+
+### Harnesses: built once
+
+`images/<harness>/Containerfile` holds the OpenShell base sandbox, apt tools, and the agent CLI
+(`npm i -g @earendil-works/pi-coding-agent`, or omp). It contains **no role text and no config**.
+`harnesses/<harness>.json` records each CLI's plumbing in machine-readable form: the agent dir env var, the launch
+command, the config file names, and its quirks. A harness image is the slow build, and every persona on that
+harness reuses its cached copy.
+
+### Personas: a thin layer on a harness
+
+Each `personas/<name>/` has three parts:
+
+- **`persona.json`** is the manifest read by `build.sh` and `launch.sh`. It sets the harness, image tag, policy,
+  provider list, launch command, `mount_default`, and `mount_read_only`.
+- **`Containerfile`** is `FROM` the harness image, then assembles the persona:
+
+  ```dockerfile
+  FROM openshell-pi-harness:local
+  COPY shared/instructions/house-rules.md shared/instructions/roles/web-dev.md /tmp/assemble/
+  RUN cat /tmp/assemble/house-rules.md /tmp/assemble/web-dev.md > /sandbox/agent/AGENTS.md
+  COPY personas/pi-web-dev/payload/ /sandbox/agent/     # harness config only
+  COPY shared/skills/               /sandbox/agent/skills/
+  RUN pi install npm:@juicesharp/rpiv-ask-user-question # last: pi install rewrites settings.json
+  ```
+
+- **`payload/`** is **harness config only**: the model, provider, and MCP settings. It never holds instructions.
+
+The persona layer never changes the harness, and the harness never contains role text. Editing a role or skill
+rebuilds one thin layer in seconds.
+
+Optional capabilities are extra layers in the persona's Containerfile. For example, the `*-web-dev` personas run
+`shared/browser/install.sh`, which installs Playwright's Chromium and the `agent-browser` skill, and they set the
+Chrome flags that OpenShell requires.
+
+### Roles and skills: harness-neutral
+
+- **House rules** (`shared/instructions/house-rules.md`) go into every agent: use Context7 for docs, call MCP tools
+  via codemode, and so on.
+- **Roles** (`shared/instructions/roles/<role>.md`) define the job and its definition of done. `AGENTS.md` is built
+  at image build time as `house-rules.md` + `<role>.md`. So one role file serves any harness: `pi-web-dev` and
+  `omp-web-dev` read identical instructions.
+- **Skills** (`shared/skills/<skill>/SKILL.md`) follow the Agent Skills spec. pi and omp both implement it and both
+  scan `<agent-dir>/skills/`, so a skill is written once and works in every persona. Roles tell the agent which
+  skills to load (`/skill:web-dev`, `/skill:agent-browser`).
+
+### Two conventions that make it composable
+
+**1. Every harness uses one writable agent dir: `/sandbox/agent`.** Harness images set
+`PI_CODING_AGENT_DIR=/sandbox/agent`. pi relocates its agent dir with that variable, and so does omp for its
+default profile. Payloads, `AGENTS.md`, skills, sessions, and caches all live there. As a result, a policy never
+needs to know which harness is running: it grants `/sandbox/agent` plus `/tmp`, and that's enough.
+
+**2. Share the skills and role text, and keep the plumbing per harness.** Only config file names and formats
+differ:
+
+| | pi | omp |
+|---|---|---|
+| agent config dir | `$PI_CODING_AGENT_DIR` | `$PI_CODING_AGENT_DIR` (default profile only) |
+| config files | `settings.json`, `models.json`, `mcp.json` | `config.yml`, **`models.yml` (YAML)**, `mcp.json` |
+| project config | `.pi/` | `.omp/` |
+| profiles | none | `--profile x` exists, but named profiles **ignore** `PI_CODING_AGENT_DIR`, so don't use them |
+
+So payloads aren't shared or symlinked across harnesses. Everything else is shared.
+
+### Policies: chosen by role, not by persona
+
+| Role | Writes code? | Policy | Filesystem |
+|---|---|---|---|
+| developer | yes, in the mounted repo | `policies/dev.yaml` | `/sandbox/work` read-write, plus `/tmp` and the agent dir |
+| PR reviewer | no, it only comments | `policies/review.yaml` | repo mounted read-only **and** listed read-only in the policy (defense in depth). The agent dir stays writable for sessions. |
+| planner | no, it writes a plan to `/tmp` | `policies/review.yaml` | same as the reviewer |
+| untrusted input | maybe | `policies/strict.yaml` | no host mount. Collect output with `openshell sandbox cp`. |
+
+Policies are plain OpenShell YAML, enforced with Landlock. Any path that isn't listed is inaccessible.
+
+### Providers: network is decided here, not in the persona
+
+Egress is deny-by-default. Each `providers/provider-<id>.yaml` is an OpenShell provider profile: the allowed hosts
+and ports, which binaries may use them, and any credentials, which the gateway injects so they never sit in the
+image. Personas only list provider ids. When a role needs a new capability, such as the GitHub API or another
+package registry, add a provider profile first; see [docs/providers.md](openshell/docs/providers.md). Planners deliberately get fewer providers than developers, because
+each extra endpoint is cost and leak surface.
+
+### Adding a persona
+
+1. **Role:** reuse a file in `shared/instructions/roles/`, or write one new file for a new job.
+2. **Payload:** `mkdir -p personas/<name>/payload` and copy a payload from another persona on the same harness.
+3. **Manifest:** write `persona.json` with the harness, image tag, policy, providers, `launch_cmd`, `mount_default`,
+   and `mount_read_only`.
+4. **Containerfile:** copy one from another persona on the same harness and change the role file and payload path.
+5. `./build.sh <name>`, then `./launch.sh <name> --dry-run`. Read the printed command before you run it.
+
+The full walkthrough is in [docs/personas.md](openshell/docs/personas.md).
+
+Personas are cheap and harnesses are the expensive axis: the five personas here need only two harness builds.
+Adding a skill is cheaper still: drop a directory into `shared/skills/` and rebuild the personas.
 
 > **Flutter / mobile app dev is on hold.** Flutter emulators can't run inside OpenShell sandboxes, so the Flutter
 > personas, skill, role, and pub.dev provider draft were removed. They're still in git history if that changes.
@@ -165,6 +294,7 @@ agent pi-general-dev -- -p --no-session --mode json "summarise this repo" </dev/
 software-factory/
 ├── openshell/              the agent fleet (see openshell/DESIGN.md)
 │   ├── build.sh  launch.sh  Makefile
+│   ├── docs/               workflow guides: providers, personas, roles/skills, policies, …
 │   ├── harnesses/          pi.json, omp.json: per-CLI descriptors
 │   ├── images/             one Containerfile per harness
 │   ├── personas/           one directory per agent: persona.json + Containerfile + payload/

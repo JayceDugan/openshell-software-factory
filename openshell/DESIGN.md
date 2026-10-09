@@ -20,6 +20,7 @@ few seconds instead of a full image build.
 ```
 project/
 ├── DESIGN.md                     this file
+├── docs/                         workflow guides (providers, personas, roles/skills, policies, harnesses, models, debugging)
 ├── build.sh                      build harness images, then persona images
 ├── launch.sh                     persona -> `openshell sandbox create ...`
 ├── Makefile                      make personas | make run-pi-web-dev | make providers
