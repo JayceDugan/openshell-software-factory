@@ -71,7 +71,7 @@ SANDBOX_NAME="$PERSONA"
 MOUNT_SOURCE="$(json_get "$MF" mount_default 2>/dev/null || true)"
 MOUNT_RO="$(json_get "$MF" mount_read_only 2>/dev/null || echo false)"
 
-DRY_RUN=0; DO_MOUNT=1; EXTRA_PROVIDERS=(); EXTRA_ENV=(); KEEP_FLAG="--no-keep"; NO_PROVIDER=0; EXTRA_ARGS=()
+DRY_RUN=0; DO_MOUNT=1; EXTRA_PROVIDERS=(); EXTRA_ENV=(); KEEP_FLAG="--no-keep"; NO_PROVIDER=0  # keeping is openshell 0.1.1 default; there is no --keep flag; EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -83,7 +83,7 @@ while [[ $# -gt 0 ]]; do
     --provider) EXTRA_PROVIDERS+=("$2"); shift 2 ;;
     --no-provider) NO_PROVIDER=1; shift ;;
     --name) SANDBOX_NAME="$2"; shift 2 ;;
-    --keep) KEEP_FLAG="--keep"; shift ;;
+    --keep) KEEP_FLAG=""; shift ;;
     --env) EXTRA_ENV+=("$2"); shift 2 ;;
     --) shift; EXTRA_ARGS=("$@"); break ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
@@ -105,7 +105,7 @@ fi
 
 # --env K=V passed through as two separate argv entries (one joined string would be one flag)
 for kv in "${EXTRA_ENV[@]:-}"; do [[ -n "$kv" ]] && CMD+=(--env "$kv"); done
-CMD+=("$KEEP_FLAG")
+[[ -n "$KEEP_FLAG" ]] && CMD+=("$KEEP_FLAG")
 
 if [[ "$POLICY" == *strict* && $DO_MOUNT == 1 && -n "$MOUNT_SOURCE" ]]; then
   echo "note: policies/strict.yaml assumes NO host mount - add --no-mount to match it" >&2
@@ -135,7 +135,7 @@ fi
 CMD+=(--)
 read -ra LAUNCH_ARRAY <<< "$LAUNCH_CMD"   # allows launch_cmd to be "pi" or "omp --profile review"
 CMD+=("${LAUNCH_ARRAY[@]}")
-[[ ${#EXTRA_ARGS[@]} -gt 0 ]] && CMD+=("${EXTRA_ARGS[@]}")
+[[ -n "${EXTRA_ARGS[*]:-}" ]] && CMD+=("${EXTRA_ARGS[@]}")   # bash 3.2: empty array is "unbound" under set -u
 
 # ---------- print, then run ----------
 printf '%s' "${CMD[0]}"

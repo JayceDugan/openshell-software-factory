@@ -43,15 +43,15 @@ manifest_get() { # <persona-dir> <key>
   json_get "$ROOT/personas/$1/persona.json" "$2"
 }
 
-declare -A BUILT=()
+BUILT=" "   # space-delimited list (bash 3.2 on macOS has no associative arrays)
 build_harness() { # <harness>
   local h="$1" image
-  if [[ -n "${BUILT[$h]:-}" ]]; then return 0; fi
+  if [[ "$BUILT" == *" $h "* ]]; then return 0; fi
   [[ -f "$ROOT/harnesses/$h.json" ]] || { echo "no harness manifest: harnesses/$h.json" >&2; exit 1; }
   image="$(json_get "$ROOT/harnesses/$h.json" image)"
   echo "==> harness image $image  (images/$h/Containerfile)"
   if [[ $DRY_RUN == 1 ]]; then echo "    podman build -t $image -f $ROOT/images/$h/Containerfile $ROOT"; else podman build -t "$image" -f "$ROOT/images/$h/Containerfile" "$ROOT"; fi
-  BUILT[$h]=1
+  BUILT+="$h "
 }
 
 if [[ $ONLY_HARNESS == 1 ]]; then

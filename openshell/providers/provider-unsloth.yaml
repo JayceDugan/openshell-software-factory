@@ -1,5 +1,5 @@
 id: unsloth
-resource_version: 2
+resource_version: 3
 display_name: Unsloth
 description: Direct Homelab Unsloth Access
 category: inference

@@ -5,12 +5,27 @@
   "containerfile": "images/omp/Containerfile",
   "agent_dir": "/sandbox/agent",
   "project_config_dir": ".omp",
-  "config_env": { "HOME": "/sandbox", "PI_CODING_AGENT_DIR": "/sandbox/agent" },
+  "config_env": {
+    "HOME": "/sandbox",
+    "PI_CODING_AGENT_DIR": "/sandbox/agent",
+    "PI_CONFIG_DIR": "agent/.omp",
+    "PI_NATIVES_DIR": "/usr/local/lib/omp/natives"
+  },
   "launch_cmd": "omp",
-  "payload_files": ["AGENTS.md", "config.yml", "models.yml", "mcp.json", "settings.json"],
+  "payload_files": [
+    "AGENTS.md",
+    "config.yml",
+    "models.yml",
+    "mcp.json",
+    "settings.json"
+  ],
   "notes": [
-    "docs/settings.md: PI_CODING_AGENT_DIR relocates the DEFAULT profile's agent dir (config.yml + agent data). Named profiles derive their own dir and IGNORE it, so do not use --profile with this layout.",
-    "models file is models.yml (YAML) for omp vs models.json for pi: payloads are per-harness, never shared.",
-    "Skills (Agent Skills spec) and AGENTS.md role text ARE shared with pi personas via shared/."
+    "Verified 2026-10-09 (omp v18.8.6): PI_CODING_AGENT_DIR=/sandbox/agent is honored for config.yml, models.yml, mcp.json, AGENTS.md and skills/ (default profile only - never use --profile).",
+    "omp ALSO writes outside the agent dir to its config root ($HOME/.omp: logs/, run/). PI_CONFIG_DIR=agent/.omp (joined onto HOME) moves it to /sandbox/agent/.omp so read-only-HOME policies work.",
+    "The embedded Rust addon is extracted at BUILD time to PI_NATIVES_DIR=/usr/local/lib/omp/natives; the natives loader ignores PI_CONFIG_DIR.",
+    "mcp.json differs from pi despite the same file name: timeout is MILLISECONDS (pi: seconds), header env refs must be ${VAR} (pi also accepts $VAR), use \"type\": \"http\".",
+    "Single Bun binary: provider profiles must list /usr/local/bin/omp in binaries, or all egress is denied.",
+    "Startup probes model-catalog hosts (zenmux.ai, api.venice.ai, hyper.charm.land, catalog.stencil.so, api.kilo.ai, ...); these are denied by policy and harmless.",
+    "models file is models.yml (YAML) vs pi's models.json; payloads are per-harness. Skills and AGENTS.md role text are shared."
   ]
 }

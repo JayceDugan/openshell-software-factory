@@ -1,5 +1,5 @@
 id: context7
-resource_version: 2
+resource_version: 4
 display_name: Context7
 description: Context7 MCP Server (up-to-date library documentation)
 category: knowledge
@@ -21,4 +21,4 @@ endpoints:
     protocol: rest
     access: read-write
     enforcement: enforce
-binaries: [/usr/bin/curl, /usr/local/bin/curl, /usr/local/bin/node, /usr/bin/node]
+binaries: [/usr/bin/curl, /usr/local/bin/curl, /usr/local/bin/node, /usr/bin/node, /usr/local/bin/omp]

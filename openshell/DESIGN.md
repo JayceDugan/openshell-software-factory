@@ -70,8 +70,8 @@ Two layers, always:
 
 # 2. personas/pi-flutter-dev/Containerfile      -> pi-flutter-dev:local
 FROM openshell-pi-harness:local
-COPY shared/instructions/house-rules.md shared/instructions/roles/flutter-dev.md /tmp/assemble.md
-RUN cat /tmp/assemble.md > /sandbox/agent/AGENTS.md          # role instructions assembled at build time
+COPY shared/instructions/house-rules.md shared/instructions/roles/flutter-dev.md /tmp/assemble/
+RUN cat /tmp/assemble/house-rules.md /tmp/assemble/flutter-dev.md > /sandbox/agent/AGENTS.md         # role instructions assembled at build time
 COPY personas/pi-flutter-dev/payload/  /sandbox/agent/       # settings.json, mcp.json, models.json, trust.json
 COPY shared/skills/                    /sandbox/agent/skills/
 RUN pi install npm:@juicesharp/rpiv-ask-user-question        # after payload: pi install rewrites settings.json
@@ -191,10 +191,20 @@ Confirmed:
 - omp config dir is `~/.omp/agent` / `.omp/`, `models.yml` is YAML, profiles isolate settings/auth/sessions, and named profiles ignore `PI_CODING_AGENT_DIR`.
 - OpenShell upstream itself uses manifest-driven agents (`scripts/agents/README.md`: `agent.yaml` with `sandbox`, `harness`, `runtime`, `profile_paths`, skills, subagents; harness adapters live outside agent dirs; payload baked read-only under `/etc/openshell/agent-payload`). This layout is a smaller version of that pattern.
 
-Not verified — I cannot run `podman`/`openshell` in this sandbox, so treat these as first-test items:
+Verified end-to-end on the host (2026-10-09, openshell 0.1.1, podman applehv):
+- `openshell-pi-harness:local` + `pi-planner:local` build; sandbox create→run→delete takes ~2s.
+- Headless run: `sandbox create --no-tty --no-keep --provider bifrost --provider context7 -- sh -c 'exec pi -p --no-session --mode json "<task>" </dev/null'`.
+  **stdin must be closed** (`</dev/null`): pi reads non-TTY stdin to EOF and hangs forever otherwise.
+- bifrost (`homelab:8080/v1/chat/completions`) and Context7 MCP egress allowed via `_provider_*` rules; Landlock denies `ls /sandbox` under review.yaml as intended.
+- pi `--mode json` exits 0 even after a model `Connection error` (it auto-retried and succeeded); judge success from `agent_settled` + final `stopReason`, not the exit code.
+- `--upload` cannot be combined with a trailing command in 0.1.1; `--keep` does not exist (keep is the default).
+- OpenShell ignores the image `WORKDIR`: the agent process starts in `/sandbox` (= `$HOME`). omp treats `$HOME` as
+  "don't work here" and auto-switches to a temp dir, so headless runs should `cd /sandbox/work` (or pass `--cwd`).
+- omp v18.8.6 verified headless under both dev.yaml and review.yaml, with bifrost + Context7 MCP. Harness quirks
+  (config root, natives dir, mcp.json units/syntax, provider binaries) are recorded in `harnesses/omp.json` notes.
+
+Not verified (originally written without podman access) — I cannot run `podman`/`openshell` in this sandbox, so treat these as first-test items:
 1. **No image was ever built and no sandbox ever started here.** Only command composition is tested.
-2. `PI_CODING_AGENT_DIR=/sandbox/agent` for omp: docs support it for the default profile, but I could not confirm sessions/tools/extensions all follow it. Fallback: bake to `/sandbox/.omp/agent` with `HOME=/sandbox`.
-3. omp install path in `images/omp/Containerfile` (install.sh vs bun) and where the `omp` binary lands on `PATH`. Check with `podman run --rm openshell-omp-harness:which omp`. The file has both variants; only one is enabled.
 4. Whether the gateway overrides the sandbox workdir/user in a way that changes `include_workdir` resolution.
 5. Provider profiles I marked `.draft` (see below) are guesses about hosts — review before applying.
 
