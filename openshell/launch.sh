@@ -133,6 +133,9 @@ if [[ $DO_MOUNT == 1 && -n "$MOUNT_SOURCE" ]]; then
 fi
 
 CMD+=(--)
+# OpenShell ignores the image WORKDIR and starts the agent in /sandbox (= $HOME); omp then
+# auto-switches to a temp dir. `sandbox create` has no --workdir, so cd via a tiny shim.
+CMD+=(sh -c 'cd /sandbox/work && exec "$@"' sh)
 read -ra LAUNCH_ARRAY <<< "$LAUNCH_CMD"   # allows launch_cmd to be "pi" or "omp --profile review"
 CMD+=("${LAUNCH_ARRAY[@]}")
 [[ -n "${EXTRA_ARGS[*]:-}" ]] && CMD+=("${EXTRA_ARGS[@]}")   # bash 3.2: empty array is "unbound" under set -u

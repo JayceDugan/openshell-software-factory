@@ -1,21 +1,18 @@
 id: npm
-resource_version: 1
+resource_version: 2
 display_name: NPM
-description: npm Package registry 
+description: npm package registry (anonymous, read-only installs)
 category: data
 inference_capable: false
-
-network_policies: 
-  npm_registry:
-    endpoints:
-      - host: registry.npm.org
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        access: read-only
-        allow_encoded_slash: true
-    binaries:
-      - path: /usr/bin/node
-      - path: /usr/local/bin/node
-      - path: /usr/bin/node
-      - path: /usr/bin/bash
+# Modeled on openshell-source/providers/pypi.yaml. OpenShell identifies a process by its real
+# executable (symlinks resolved), so `npm`/`npx` (scripts at /usr/lib/node_modules/npm/bin/*.js)
+# match the node interpreter that runs them. Real path in our harness images: /usr/bin/node.
+# omp is deliberately NOT listed: it has no business pulling packages.
+# Smoke test: openshell sandbox create --provider npm -- npm view left-pad version
+endpoints:
+  - host: registry.npmjs.org
+    port: 443
+    protocol: rest
+    access: read-only
+    enforcement: enforce
+binaries: [/usr/bin/node, /usr/local/bin/node]

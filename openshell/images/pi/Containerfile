@@ -13,6 +13,9 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 # never needs to know which harness is running. Pi reads its agent dir from this var.
 ENV PI_CODING_AGENT_DIR=/sandbox/agent
 
+# npm caches in $HOME/.npm by default, which review/strict policies leave read-only.
+ENV NPM_CONFIG_CACHE=/sandbox/agent/.npm
+
 USER root
 
 RUN apt-get update \

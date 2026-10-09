@@ -22,6 +22,9 @@ ENV HOME=/sandbox
 # (docs/settings.md) -> never launch these personas with --profile <name>.
 ENV PI_CODING_AGENT_DIR=/sandbox/agent
 
+# npm caches in $HOME/.npm by default, which review/strict policies leave read-only.
+ENV NPM_CONFIG_CACHE=/sandbox/agent/.npm
+
 # omp also writes OUTSIDE the agent dir, to its config root ($HOME/.omp): extracted native
 # addon (natives/), logs/, run/. Without this, read-only-$HOME policies (review.yaml) crash at
 # startup with "Failed to load pi_natives native addon". PI_CONFIG_DIR is joined onto $HOME
