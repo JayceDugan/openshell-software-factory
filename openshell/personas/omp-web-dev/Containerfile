@@ -1,0 +1,42 @@
+# PERSONA layer: omp-web-dev  (harness: omp, role: web-dev)
+# Build context is project/ (see build.sh). Build via ./build.sh omp-web-dev.
+#
+# general-dev + a headless browser (Vercel agent-browser driving Chromium) so the agent can
+# serve a React/Next app on localhost inside the sandbox and actually look at it.
+# pi-web-dev is the same persona on the pi harness; keep the browser blocks in sync.
+
+FROM openshell-omp-harness:local
+
+# Harness image ends as USER sandbox; installs + assembly + chown below need root.
+USER root
+
+# ---------- headless browser (shared/browser/install.sh) ----------
+# Browsers live under /usr: dev.yaml grants /usr read-only, whereas /opt is in neither list.
+ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/ms-playwright
+COPY shared/browser/install.sh /tmp/browser-install.sh
+RUN sh /tmp/browser-install.sh /sandbox/agent && rm /tmp/browser-install.sh
+
+# OpenShell denies the user namespaces Chrome's sandbox and zygote need (the zygote dies in
+# credentials.cc even with --no-sandbox), so: --no-sandbox + --no-zygote, plus --disable-gpu
+# (the GPU process can't fork either). --disable-dev-shm-usage: /dev/shm isn't writable under
+# policies/dev.yaml, so Chrome uses /tmp. Verified in-sandbox with Chromium 141.
+ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/local/bin/chromium \
+	AGENT_BROWSER_ARGS=--no-sandbox,--no-zygote,--disable-gpu,--disable-dev-shm-usage \
+	AGENT_BROWSER_SCREENSHOT_DIR=/tmp/screenshots \
+	NEXT_TELEMETRY_DISABLED=1
+
+# ---------- persona assembly (same shape as the other omp personas) ----------
+COPY shared/instructions/house-rules.md shared/instructions/roles/web-dev.md /tmp/assemble/
+RUN mkdir -p /sandbox/agent \
+	&& cat /tmp/assemble/house-rules.md /tmp/assemble/web-dev.md > /sandbox/agent/AGENTS.md \
+	&& rm -rf /tmp/assemble
+
+COPY personas/omp-web-dev/payload/ /sandbox/agent/
+
+# Harness-neutral skills: pi and omp both scan <agent-dir>/skills for SKILL.md dirs.
+COPY shared/skills/ /sandbox/agent/skills/
+
+RUN chown -R sandbox:sandbox /sandbox/agent
+
+USER sandbox
+WORKDIR /sandbox/work

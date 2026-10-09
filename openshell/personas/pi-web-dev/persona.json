@@ -1,0 +1,18 @@
+{
+  "persona": "pi-web-dev",
+  "display_name": "Pi web developer (React/Next.js, headless Chromium via agent-browser)",
+  "harness": "pi",
+  "image": "pi-web-dev:local",
+  "policy": "policies/dev.yaml",
+  "providers": ["bifrost", "context7", "langfuse", "npm", "googlefonts"],
+  "launch_cmd": "pi",
+  "mount_default": ".",
+  "mount_read_only": false,
+  "role": "developer",
+  "notes": [
+    "general-dev + agent-browser driving Playwright's Chromium (Chrome for Testing has no linux-arm64 build).",
+    "The agent serves the app on localhost inside the sandbox and checks it with agent-browser; no egress is needed for that. Use localhost, not 127.0.0.1 (IPv4 loopback is swallowed in OpenShell).",
+    "googlefonts provider: next/font/google needs it for next build (dev falls back without it).",
+    "A host-installed node_modules (macOS) lacks linux native binaries; the agent runs npm install in the sandbox, after which the host needs its own fresh npm install."
+  ]
+}

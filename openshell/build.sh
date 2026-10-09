@@ -2,7 +2,7 @@
 # Build harness images, then persona images (persona config is BAKED into the image).
 #
 #   ./build.sh                        build every persona under personas/
-#   ./build.sh pi-flutter-dev omp-planner   build only these personas
+#   ./build.sh pi-web-dev pi-planner   build only these personas
 #   ./build.sh --harnesses            rebuild harness images only
 #   ./build.sh --dry-run              print the podman commands without building
 #

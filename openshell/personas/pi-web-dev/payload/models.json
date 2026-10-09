@@ -6,8 +6,12 @@
       "apiKey": "unused",
       "models": [
         {
-          "id": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF",
-          "contextWindow": 180000
+          "id": "Strata/qwen3.8-flash-next-iq3_xxs",
+          "contextWindow": 262144,
+          "input": [
+            "text",
+            "image"
+          ]
         }
       ]
     }

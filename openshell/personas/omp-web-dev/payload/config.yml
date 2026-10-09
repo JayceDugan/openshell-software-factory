@@ -1,0 +1,9 @@
+# User-level omp settings for this persona (lives in the agent dir, /sandbox/agent/config.yml).
+modelRoles:
+  default: bifrost/Strata/qwen3.8-flash-next-iq3_xxs
+  # Screenshot/image analysis (docs/settings.md). Same model: it is vision-capable, which
+  # models.yml declares with input: [text, image].
+  vision: bifrost/Strata/qwen3.8-flash-next-iq3_xxs
+
+theme:
+  dark: titanium

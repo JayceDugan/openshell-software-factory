@@ -1,0 +1,18 @@
+{
+  "persona": "omp-web-dev",
+  "display_name": "omp web developer (React/Next.js, headless Chromium via agent-browser)",
+  "harness": "omp",
+  "image": "omp-web-dev:local",
+  "policy": "policies/dev.yaml",
+  "providers": ["bifrost", "context7", "langfuse", "npm", "googlefonts"],
+  "launch_cmd": "omp",
+  "mount_default": ".",
+  "mount_read_only": false,
+  "role": "developer",
+  "notes": [
+    "Same role, skills and browser layer as pi-web-dev (shared/browser/install.sh); only the omp payload differs.",
+    "agent-browser, npm and next run under node, so the npm/googlefonts providers (binaries: node) cover them; omp itself only needs bifrost/context7/langfuse.",
+    "Use localhost, not 127.0.0.1 (IPv4 loopback is swallowed in OpenShell).",
+    "Do not add --profile to launch_cmd: named profiles ignore PI_CODING_AGENT_DIR."
+  ]
+}

@@ -3,8 +3,8 @@
 #   make providers     push every providers/provider-*.yaml (unchanged behavior)
 #   make harnesses     rebuild harness images only
 #   make personas      build harness images + all persona images
-#   make pi-flutter-dev        build one persona
-#   make run-pi-flutter-dev    launch it (add MOUNT=/path or ARGS="-- ..." )
+#   make pi-web-dev            build one persona
+#   make run-pi-web-dev        launch it (add MOUNT=/path or ARGS="-- ..." )
 #   make dry-pi-planner        print the exact openshell command, run nothing
 
 OPENSELL ?= openshell

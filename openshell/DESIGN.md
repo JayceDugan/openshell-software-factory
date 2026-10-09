@@ -5,7 +5,7 @@ separate axes instead of encoding all of them in one Containerfile per agent.
 
 ```
 HARNESS   = which coding-agent CLI lives in the image      (pi, omp, claude, codex, opencode)
-PERSONA   = harness + role instructions + config payload   (pi-flutter-dev, pi-pr-reviewer, ...)
+PERSONA   = harness + role instructions + config payload   (pi-web-dev, pi-pr-reviewer, ...)
 ROLE      = the job: developer / reviewer / planner / ...  (changes AGENTS.md, skills, policy)
 POLICY    = the security boundary, keyed by ROLE           (dev.yaml, review.yaml, strict.yaml)
 PROVIDERS = network + credential grants, fleet-wide        (providers/provider-*.yaml)
@@ -22,7 +22,7 @@ project/
 ├── DESIGN.md                     this file
 ├── build.sh                      build harness images, then persona images
 ├── launch.sh                     persona -> `openshell sandbox create ...`
-├── Makefile                      make personas | make run-pi-flutter-dev | make providers
+├── Makefile                      make personas | make run-pi-web-dev | make providers
 ├── .containerignore              keeps providers/ + docs out of the image build context
 │
 ├── harnesses/                    one descriptor per coding-agent CLI (machine-readable)
@@ -34,14 +34,15 @@ project/
 │   └── omp/Containerfile         -> openshell-omp-harness:local
 │
 ├── personas/                     one directory per AGENT (harness + role + payload)
-│   ├── pi-flutter-dev/
+│   ├── pi-general-dev/
 │   │   ├── persona.json          manifest read by build.sh / launch.sh (harness, image, policy,
 │   │   │                        providers, launch cmd, mount settings)
 │   │   ├── Containerfile         thin layer: FROM the harness image + COPYs instructions/payload/skills
 │   │   └── payload/              HARNESS CONFIG ONLY: settings.json, mcp.json, models.json, trust.json
 │   ├── pi-pr-reviewer/           same shape, policies/review.yaml, read-only mount
 │   ├── pi-planner/               same shape, policies/review.yaml
-│   └── omp-flutter-dev/          same role file + skills, omp harness -> config.yml + models.yml instead
+│   ├── pi-web-dev/               web-dev role + headless browser (agent-browser + Chromium)
+│   └── omp-web-dev/              same as pi-web-dev on the omp harness
 │
 ├── policies/                     keyed by ROLE, not by persona
 │   ├── dev.yaml                  workdir read-write (developer)
@@ -50,8 +51,9 @@ project/
 │
 ├── shared/                       harness-neutral assets, COPYed into persona images
 │   ├── instructions/house-rules.md        Context7 + codemode rules
-│   ├── instructions/roles/<role>.md       the job: flutter-dev, pr-reviewer, planner, general-dev
-│   └── skills/flutter-dev/SKILL.md        Agent Skills spec -> works for pi and omp
+│   ├── instructions/roles/<role>.md       the job: web-dev, pr-reviewer, planner, general-dev
+│   ├── skills/<skill>/SKILL.md            Agent Skills spec -> works for pi and omp (web-dev)
+│   └── browser/install.sh                 headless browser layer, RUN by the *-web-dev personas
 │
 └── providers/                    unchanged (Makefile pattern already correct)
 ```
@@ -68,11 +70,11 @@ Two layers, always:
 #    base sandbox + apt tools + `npm i -g @earendil-works/pi-coding-agent`
 #    ENV PI_CODING_AGENT_DIR=/sandbox/agent     <- no persona config here at all
 
-# 2. personas/pi-flutter-dev/Containerfile      -> pi-flutter-dev:local
+# 2. personas/pi-general-dev/Containerfile      -> pi-general-dev:local
 FROM openshell-pi-harness:local
-COPY shared/instructions/house-rules.md shared/instructions/roles/flutter-dev.md /tmp/assemble/
-RUN cat /tmp/assemble/house-rules.md /tmp/assemble/flutter-dev.md > /sandbox/agent/AGENTS.md         # role instructions assembled at build time
-COPY personas/pi-flutter-dev/payload/  /sandbox/agent/       # settings.json, mcp.json, models.json, trust.json
+COPY shared/instructions/house-rules.md shared/instructions/roles/general-dev.md /tmp/assemble/
+RUN cat /tmp/assemble/house-rules.md /tmp/assemble/general-dev.md > /sandbox/agent/AGENTS.md         # role instructions assembled at build time
+COPY personas/pi-general-dev/payload/  /sandbox/agent/       # settings.json, mcp.json, models.json, trust.json
 COPY shared/skills/                    /sandbox/agent/skills/
 RUN pi install npm:@juicesharp/rpiv-ask-user-question        # after payload: pi install rewrites settings.json
 ```
@@ -95,7 +97,7 @@ This is why every policy grants `/sandbox/agent` without knowing which harness r
 `/sandbox/.pi` (Pi's default) is not used anywhere in this fleet.
 
 **2. Skills and role text are harness-neutral; only config file *names* differ.**
-Both Pi and omp implement the Agent Skills spec, so `shared/skills/flutter/SKILL.md` serves
+Both Pi and omp implement the Agent Skills spec, so `shared/skills/web-dev/SKILL.md` serves
 both. What must be duplicated per harness is the plumbing:
 
 | | pi | omp |
@@ -112,11 +114,11 @@ and the *role instructions*, generate the plumbing per harness.
 
 ```bash
 ./build.sh                      # all harness images (cached) + all persona images
-./build.sh pi-flutter-dev       # one persona
+./build.sh pi-web-dev           # one persona
 ./build.sh --harnesses          # harness layers only
 
-./launch.sh pi-flutter-dev --dry-run     # print the exact openshell command, run nothing
-./launch.sh pi-flutter-dev               # create sandbox and launch `pi`
+./launch.sh pi-web-dev --dry-run         # print the exact openshell command, run nothing
+./launch.sh pi-web-dev                   # create sandbox and launch `pi`
 ./launch.sh pi-pr-reviewer --mount ~/repos/app   # override the host repo bind-mount source
 ```
 
@@ -131,8 +133,8 @@ pi() { openshell sandbox create --from pi-agent:local --provider bifrost ... \
 becomes:
 
 ```zsh
-agent() { ~/project/launch.sh "$1" --mount "${2:-$PWD}"; }   # agent pi-planner | agent pi-flutter-dev ~/repos/app
-alias pi='agent pi-flutter-dev'                              # keep the old muscle memory if you want it
+agent() { ~/Projects/software-factory/openshell/launch.sh "$@"; }   # agent pi-planner | agent pi-web-dev --mount ~/repos/app
+alias pi='agent pi-general-dev'                             # keep the old muscle memory if you want it
 ```
 
 One alias, every persona. `--dry-run` is the escape hatch: run it first and read the command.
@@ -167,7 +169,7 @@ tools, which matters if you rewrite the launcher in Go later.
 
 Persona count is cheap; harness count is the expensive axis. Four personas here need only two builds.
 
-If a role needs a new capability (GitHub API, pub.dev, a package registry), add a provider
+If a role needs a new capability (GitHub API, a package registry), add a provider
 profile first — network access is decided by `providers/`, not by the persona.
 
 ## What I verified vs. what you must test
@@ -208,12 +210,23 @@ Not verified (originally written without podman access) — I cannot run `podman
 4. Whether the gateway overrides the sandbox workdir/user in a way that changes `include_workdir` resolution.
 5. Provider profiles I marked `.draft` (see below) are guesses about hosts — review before applying.
 
-Roles are shared assets too: `shared/instructions/roles/{flutter-dev,pr-reviewer,planner,general-dev}.md`.
+Roles are shared assets too: `shared/instructions/roles/{web-dev,pr-reviewer,planner,general-dev}.md`.
 A persona's `AGENTS.md` is assembled at build time as `house-rules.md + <role>.md`, so the same role
-text serves any harness, and one role can exist in several harnesses (`pi-flutter-dev`,
-`omp-flutter-dev`). Adding a role = add one file under `shared/instructions/roles/`.
+text serves any harness, and one role can exist in several harnesses (`pi-web-dev`,
+`omp-web-dev`). Adding a role = add one file under `shared/instructions/roles/`.
+
+Headless browser (`pi-web-dev`, `omp-web-dev`), verified 2026-10-09 in OpenShell under dev.yaml on arm64:
+- `agent-browser install` can't be used: Chrome for Testing has no linux-arm64 build and Ubuntu 24.04's
+  chromium is a snap stub. `shared/browser/install.sh` installs Playwright's Chromium under `/usr`
+  (`/opt` is in neither Landlock list) and agent-browser's own skill as `skills/agent-browser`.
+- Chrome needs `--no-sandbox --no-zygote --disable-gpu --disable-dev-shm-usage` (no user namespaces,
+  no writable /dev/shm), set via `AGENT_BROWSER_ARGS` in the persona Containerfile.
+- IPv4 loopback TCP is swallowed inside the sandbox; `localhost` (= `::1`) works. Agents must browse
+  `http://localhost:PORT`, never `127.0.0.1`.
+- `next/font/google` needs `providers/provider-googlefonts.yaml` for `next build` (dev falls back).
+- Both agents passed a headless run against a copy of a Next 16 app: serve, open, snapshot, console, stop.
 
 Open gaps worth deciding next:
 - **No GitHub provider profile**, yet `pi-pr-reviewer` is useless without `api.github.com`. Drafted as `providers/provider-github.yaml.draft` (the Makefile glob only matches `provider-*.yaml`, so it won't be pushed by accident).
-- **No pub.dev / Flutter CDN provider** for a persona that would actually run `dart pub get`; also note no Flutter SDK is installed in these images — the Flutter personas are instruction-only, as chosen.
+- **Flutter / mobile app dev is on hold.** Flutter emulators can't run inside OpenShell sandboxes, so the Flutter personas, skill, role and pub.dev provider draft were removed (2026-10-10). Recover them from git history if that changes.
 - If you ever want config iteration without rebuilds, OpenShell supports `--upload .:/sandbox/agent` (or an `image:` mount of a payload image). Kept out for now because you chose bake-only.

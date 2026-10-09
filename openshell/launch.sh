@@ -126,9 +126,9 @@ if [[ $DO_MOUNT == 1 && -n "$MOUNT_SOURCE" ]]; then
     const ro = String(process.env.MOUNT_RO).toLowerCase() === "true";
     process.stdout.write(JSON.stringify({ podman: { mounts: [{ type: "bind", source: process.env.MOUNT_SOURCE, target: "/sandbox/work", read_only: ro }] } }));' 2>/dev/null \
   || MOUNT_SOURCE="$MOUNT_SOURCE" MOUNT_RO="$MOUNT_RO" python3 -c '
-    import json, os, sys
-    ro = os.environ.get("MOUNT_RO", "false").lower() == "true"
-    sys.stdout.write(json.dumps({"podman": {"mounts": [{"type": "bind", "source": os.environ["MOUNT_SOURCE"], "target": "/sandbox/work", "read_only": ro}]}}))')"
+import json, os, sys
+ro = os.environ.get("MOUNT_RO", "false").lower() == "true"
+sys.stdout.write(json.dumps({"podman": {"mounts": [{"type": "bind", "source": os.environ["MOUNT_SOURCE"], "target": "/sandbox/work", "read_only": ro}]}}))')"
   CMD+=(--driver-config-json "$DRIVER_JSON")
 fi
 

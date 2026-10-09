@@ -1,0 +1,6 @@
+{
+  "lastChangelogVersion": "0.87.1",
+  "theme": "dark",
+  "defaultProvider": "bifrost",
+  "defaultModel": "Strata/qwen3.8-flash-next-iq3_xxs"
+}

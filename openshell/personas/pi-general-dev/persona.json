@@ -1,0 +1,15 @@
+{
+  "persona": "pi-general-dev",
+  "display_name": "Pi general developer (base pi agent, writes code in the mounted repo)",
+  "harness": "pi",
+  "image": "pi-general-dev:local",
+  "policy": "policies/dev.yaml",
+  "providers": ["bifrost", "context7", "langfuse", "npm"],
+  "launch_cmd": "pi",
+  "mount_default": ".",
+  "mount_read_only": false,
+  "role": "developer",
+  "notes": [
+    "Baseline pi persona: house rules + general-dev role, no stack-specific skills or SDKs. Use it to smoke-test models and the harness."
+  ]
+}

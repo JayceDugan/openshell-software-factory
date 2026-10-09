@@ -1,0 +1,15 @@
+{
+  "providers": {
+    "bifrost": {
+      "baseUrl": "http://homelab:8080/v1",
+      "api": "openai-completions",
+      "apiKey": "unused",
+      "models": [
+        {
+          "id": "Strata/qwen3.8-flash-next-iq3_xxs",
+          "contextWindow": 262144
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,22 @@
+id: googlefonts
+resource_version: 1
+display_name: Google Fonts
+description: Google Fonts CSS + font files (anonymous, read-only) for next/font/google builds
+category: data
+inference_capable: false
+# next/font/google fetches the CSS from fonts.googleapis.com and the font files from
+# fonts.gstatic.com at build time. `next dev` falls back to system fonts without it; `next build`
+# fails. The fetch runs inside node (Turbopack is a native addon loaded by node).
+# Smoke test: openshell sandbox create --provider googlefonts -- node -e 'fetch("https://fonts.googleapis.com/css2?family=Geist").then(r=>console.log(r.status))'
+endpoints:
+  - host: fonts.googleapis.com
+    port: 443
+    protocol: rest
+    access: read-only
+    enforcement: enforce
+  - host: fonts.gstatic.com
+    port: 443
+    protocol: rest
+    access: read-only
+    enforcement: enforce
+binaries: [/usr/bin/node, /usr/local/bin/node]

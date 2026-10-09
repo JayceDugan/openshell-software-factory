@@ -6,8 +6,10 @@ providers:
     api: openai-completions
     apiKey: unused
     models:
-      - id: ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
-        name: Qwen3.8 Flash Next GSQ RCO
-        contextWindow: 180000
+      - id: Strata/qwen3.8-flash-next-iq3_xxs
+        name: Qwen3.8 Flash Next IQ3_XXS (Strata)
+        contextWindow: 262144
+        # Without "image", omp treats the model as text-only and silently drops images.
+        input: [text, image]
 
 # Verify after first launch: omp models bifrost
