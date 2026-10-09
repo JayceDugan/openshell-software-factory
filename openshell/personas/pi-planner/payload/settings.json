@@ -1,0 +1,6 @@
+{
+  "lastChangelogVersion": "0.87.1",
+  "theme": "dark",
+  "defaultProvider": "bifrost",
+  "defaultModel": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF"
+}

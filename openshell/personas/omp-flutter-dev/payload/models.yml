@@ -1,0 +1,13 @@
+# omp equivalent of pi's models.json (YAML, not JSON). Docs: /can1357/oh-my-pi docs/providers.md.
+# apiKey accepts an env-var NAME or a literal; "unused" matches the bifrost profile's no-credential model.
+providers:
+  bifrost:
+    baseUrl: http://homelab:8080/v1
+    api: openai-completions
+    apiKey: unused
+    models:
+      - id: ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+        name: Qwen3.8 Flash Next GSQ RCO
+        contextWindow: 180000
+
+# Verify after first launch: omp models bifrost

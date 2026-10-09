@@ -1,4 +1,4 @@
-# Project Instructions
+# House rules (harness-neutral, concatenated into every persona's AGENTS.md)
 
 ## 1. Documentation: always use Context7
 
@@ -57,3 +57,9 @@ Script rules:
 - Scripts cannot start other `codemode` scripts.
 
 Direct tool calls remain fine for single obvious steps (one read, one edit). Do not use `codemode` for a single trivial call, and do not use it to hide destructive actions: state intent before edits, deletions, or anything touching production systems.
+
+## 3. Sandbox contract
+
+- You are already executing inside a secure OpenShell sandbox. Do not attempt to instantiate new sandboxes or call container runtimes to test code. Execute all test commands and code directly via local bash subprocesses.
+- Your working directory is `/sandbox/work` (the host repository, mounted per policy — possibly read-only). Your own writable config/session space is `/sandbox/agent`; scratch space is `/tmp`.
+- If a write is blocked by policy, do not work around it: report what was blocked and where the output should go instead.

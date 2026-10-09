@@ -1,0 +1,6 @@
+# Build context is project/ (harness + persona Containerfiles share it).
+# Keep it small and deterministic; provider profiles are host-side, never baked.
+providers/
+DESIGN.md
+**/.git
+**/*.draft

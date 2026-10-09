@@ -1,0 +1,45 @@
+# HARNESS layer: omp (can1357/oh-my-pi). No persona/config here - personas add it.
+#
+# Build context is project/ (see build.sh), so paths are repo-relative.
+#   podman build -t openshell-omp-harness:local -f images/omp/Containerfile .
+#
+# UNTESTED: I cannot run podman here. Two install routes are documented by omp
+# (Context7 /websites/omp_sh, /can1357/oh-my-pi); only one is enabled below.
+# After the first build verify with:
+#   podman run --rm openshell-omp-harness:local sh -c 'command -v omp && omp --version'
+# If the binary is not on PATH, switch to variant B (bun) and/or add its bin dir to ENV PATH.
+
+ARG BASE_IMAGE=ghcr.io/nvidia/openshell-community/sandboxes/base:latest
+FROM ${BASE_IMAGE}
+
+ARG OMP_VERSION=main
+ENV HOME=/sandbox
+
+# Same single writable agent-config path as every other harness, so policies/ stay
+# harness-agnostic. omp honors PI_CODING_AGENT_DIR for the DEFAULT profile only
+# (docs/settings.md) -> never launch these personas with --profile <name>.
+ENV PI_CODING_AGENT_DIR=/sandbox/agent
+
+USER root
+
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends bash ca-certificates fd-find git ripgrep vim curl jq \
+	&& ln -s /usr/bin/fdfind /usr/local/bin/fd \
+	&& rm -rf /var/lib/apt/lists/*
+
+# ---------- variant A (enabled): prebuilt binary via install.sh ----------
+# install.sh picks bun or a prebuilt binary; no bun required in the image.
+RUN curl -fsSL https://raw.githubusercontent.com/can1357/oh-my-pi/${OMP_VERSION}/scripts/install.sh | sh \
+	&& (command -v omp || ln -s /usr/local/bin/omp /usr/local/bin/omp || true)
+
+# ---------- variant B (uncomment if A lands off PATH or you want bun-managed installs) ----------
+# RUN curl -fsSL https://bun.sh/install | bash
+# ENV BUN_INSTALL=/usr/local/bun
+# ENV PATH=$PATH:/usr/local/bun/bin
+# RUN bun install -g @oh-my-pi/pi-coding-agent
+
+RUN mkdir -p /sandbox/agent /sandbox/work \
+	&& chown -R sandbox:sandbox /sandbox /sandbox/agent /sandbox/work
+
+USER sandbox
+WORKDIR /sandbox/work

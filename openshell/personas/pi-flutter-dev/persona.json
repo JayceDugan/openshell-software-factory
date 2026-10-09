@@ -1,0 +1,16 @@
+{
+  "persona": "pi-flutter-dev",
+  "display_name": "Pi Flutter developer (writes code in the mounted repo)",
+  "harness": "pi",
+  "image": "pi-flutter-dev:local",
+  "policy": "policies/dev.yaml",
+  "providers": ["bifrost", "context7", "langfuse", "vllm", "npm", "ninfer"],
+  "launch_cmd": "pi",
+  "mount_default": ".",
+  "mount_read_only": false,
+  "role": "developer",
+  "notes": [
+    "Instruction-only Flutter persona: no Flutter SDK in the image (chosen deliberately). It writes/reviews Dart and Flutter code and states what it could not run.",
+    "To actually execute flutter/dart, add an SDK layer or a pub.dev provider profile first."
+  ]
+}

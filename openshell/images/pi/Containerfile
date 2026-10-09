@@ -1,0 +1,30 @@
+# HARNESS layer: Pi coding agent. No persona/config here - personas add it.
+#
+# Build context is project/ (see build.sh), so paths are repo-relative.
+#   podman build -t openshell-pi-harness:local -f images/pi/Containerfile .
+
+ARG BASE_IMAGE=ghcr.io/nvidia/openshell-community/sandboxes/base:latest
+FROM ${BASE_IMAGE}
+
+ARG PI_VERSION=latest
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+
+# Single writable agent-config path for EVERY harness in this fleet, so policies/
+# never needs to know which harness is running. Pi reads its agent dir from this var.
+ENV PI_CODING_AGENT_DIR=/sandbox/agent
+
+USER root
+
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends bash ca-certificates fd-find git ripgrep vim curl jq \
+	&& ln -s /usr/bin/fdfind /usr/local/bin/fd \
+	&& rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"
+
+# Agent dir (sessions, caches, pi-installed packages) and the default bind-mount target.
+RUN mkdir -p /sandbox/agent /sandbox/work \
+	&& chown -R sandbox:sandbox /sandbox/agent /sandbox/work
+
+USER sandbox
+WORKDIR /sandbox/work

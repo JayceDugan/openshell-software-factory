@@ -1,0 +1,6 @@
+# User-level omp settings for this persona (lives in the agent dir, /sandbox/agent/config.yml).
+modelRoles:
+  default: bifrost/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+
+theme:
+  dark: titanium

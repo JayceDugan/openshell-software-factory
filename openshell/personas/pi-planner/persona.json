@@ -1,0 +1,20 @@
+{
+  "persona": "pi-planner",
+  "display_name": "Pi planning / architecture agent (read-only recon, plans in /tmp)",
+  "harness": "pi",
+  "image": "pi-planner:local",
+  "policy": "policies/review.yaml",
+  "providers": [
+    "bifrost",
+    "context7",
+    "npm"
+  ],
+  "launch_cmd": "pi",
+  "mount_default": ".",
+  "mount_read_only": true,
+  "role": "reviewer",
+  "notes": [
+    "No code writing; deliverables are documents under /tmp plus a chat summary.",
+    "Deliberately fewer providers than the dev personas - a planner that can reach inference endpoints other than its own is a cost/leak surface."
+  ]
+}

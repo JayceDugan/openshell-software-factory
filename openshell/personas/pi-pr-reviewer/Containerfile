@@ -1,0 +1,25 @@
+# PERSONA layer: pi-pr-reviewer  (harness: pi, role: pr-reviewer)
+# Build context is project/ (see build.sh). Build via ./build.sh pi-pr-reviewer.
+
+FROM openshell-pi-harness:local
+
+# AGENTS.md = shared house rules + one shared role file. Role text is harness-neutral,
+# so pi-flutter-dev and omp-flutter-dev read the identical instructions.
+COPY shared/instructions/house-rules.md shared/instructions/roles/pr-reviewer.md /tmp/assemble.md
+RUN mkdir -p /sandbox/agent \
+	&& cat /tmp/assemble.md > /sandbox/agent/AGENTS.md \
+	&& rm /tmp/assemble.md
+
+# Harness-specific config payload (the only part that cannot be shared across harnesses).
+COPY personas/pi-pr-reviewer/payload/ /sandbox/agent/
+
+# Harness-neutral skills: pi and omp both scan <agent-dir>/skills for SKILL.md dirs.
+COPY shared/skills/ /sandbox/agent/skills/
+
+# After the payload copy: `pi install` rewrites settings.json, so it must come last.
+RUN pi install npm:@juicesharp/rpiv-ask-user-question
+
+RUN chown -R sandbox:sandbox /sandbox/agent
+
+USER sandbox
+WORKDIR /sandbox/work

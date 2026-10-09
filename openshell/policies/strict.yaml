@@ -1,0 +1,25 @@
+# Policy: strict / no host access (untrusted input, experiments, red-team personas)
+#
+# No repository is mounted at all: nothing outside the image and /tmp is reachable.
+# Collect results with `openshell sandbox cp`/upload after the run instead of letting
+# the agent write to a live checkout.
+
+version: 1
+
+filesystem_policy:
+  include_workdir: false         # do NOT auto-add the workdir to read_write
+  read_only:
+    - /bin
+    - /usr
+    - /lib
+    - /proc
+    - /dev/urandom
+    - /etc
+    - /var/log
+  read_write:
+    - /tmp                       # all output lands here, by design
+    - /dev/null
+    - /sandbox/agent             # sessions/config only
+
+landlock:
+  compatibility: hard_requirement

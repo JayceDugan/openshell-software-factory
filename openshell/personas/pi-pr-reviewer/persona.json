@@ -1,0 +1,21 @@
+{
+  "persona": "pi-pr-reviewer",
+  "display_name": "Pi PR reviewer (read-only review of the mounted repo)",
+  "harness": "pi",
+  "image": "pi-pr-reviewer:local",
+  "policy": "policies/review.yaml",
+  "providers": [
+    "bifrost",
+    "context7",
+    "langfuse",
+    "npm"
+  ],
+  "launch_cmd": "pi",
+  "mount_default": ".",
+  "mount_read_only": true,
+  "role": "reviewer",
+  "notes": [
+    "Read-only by design: launch.sh mounts the repo read_only AND policies/review.yaml lists /sandbox/work as read-only.",
+    "Needs a GitHub provider profile to fetch PRs/diffs directly - see providers/provider-github.yaml.draft."
+  ]
+}

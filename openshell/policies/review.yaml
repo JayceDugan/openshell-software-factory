@@ -1,0 +1,29 @@
+# Policy: review / planner roles (reads the repo, never mutates it)
+#
+# Two independent layers of "cannot edit the code":
+#   1. launch.sh mounts the host repo read-only for these personas (persona.json
+#      mount_read_only: true -> driver-config-json read_only: true).
+#   2. This policy lists the workdir under read_only, so even an in-sandbox remount
+#      attempt is refused by Landlock.
+# include_workdir stays false on purpose: it would add the workdir to read_write.
+
+version: 1
+
+filesystem_policy:
+  include_workdir: false
+  read_only:
+    - /bin
+    - /usr
+    - /lib
+    - /proc
+    - /dev/urandom
+    - /etc
+    - /var/log
+    - /sandbox/work              # the mounted repo, read-only by policy too
+  read_write:
+    - /tmp                       # drafts, patches, plan documents
+    - /dev/null
+    - /sandbox/agent             # sessions/config still writable: agents must persist state
+
+landlock:
+  compatibility: hard_requirement

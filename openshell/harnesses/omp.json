@@ -1,0 +1,16 @@
+{
+  "harness": "omp",
+  "display_name": "omp (can1357/oh-my-pi)",
+  "image": "openshell-omp-harness:local",
+  "containerfile": "images/omp/Containerfile",
+  "agent_dir": "/sandbox/agent",
+  "project_config_dir": ".omp",
+  "config_env": { "HOME": "/sandbox", "PI_CODING_AGENT_DIR": "/sandbox/agent" },
+  "launch_cmd": "omp",
+  "payload_files": ["AGENTS.md", "config.yml", "models.yml", "mcp.json", "settings.json"],
+  "notes": [
+    "docs/settings.md: PI_CODING_AGENT_DIR relocates the DEFAULT profile's agent dir (config.yml + agent data). Named profiles derive their own dir and IGNORE it, so do not use --profile with this layout.",
+    "models file is models.yml (YAML) for omp vs models.json for pi: payloads are per-harness, never shared.",
+    "Skills (Agent Skills spec) and AGENTS.md role text ARE shared with pi personas via shared/."
+  ]
+}

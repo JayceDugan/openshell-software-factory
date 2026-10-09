@@ -1,0 +1,15 @@
+{
+  "harness": "pi",
+  "display_name": "Pi (@earendil-works/pi-coding-agent)",
+  "image": "openshell-pi-harness:local",
+  "containerfile": "images/pi/Containerfile",
+  "agent_dir": "/sandbox/agent",
+  "project_config_dir": ".pi",
+  "config_env": { "PI_CODING_AGENT_DIR": "/sandbox/agent" },
+  "launch_cmd": "pi",
+  "payload_files": ["AGENTS.md", "settings.json", "mcp.json", "models.json", "trust.json", "auth.json"],
+  "notes": [
+    "Pi relocates its agent dir with PI_CODING_AGENT_DIR (docs/configuration.md lists settings.json, mcp.json, models.json, AGENTS.md, skills/, extensions/ under it).",
+    "Persona layer runs pi install AFTER copying payload so package declarations are not overwritten."
+  ]
+}
