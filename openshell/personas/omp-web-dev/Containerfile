@@ -36,6 +36,13 @@ COPY personas/omp-web-dev/payload/ /sandbox/agent/
 # Harness-neutral skills: pi and omp both scan <agent-dir>/skills for SKILL.md dirs.
 COPY shared/skills/ /sandbox/agent/skills/
 
+# Langfuse tracing via the pi-langfuse extension (pi extensions load in omp too). `omp install`
+# needs bun, which the image doesn't have, so npm installs it and `omp plugin link` registers it.
+# --legacy-peer-deps: its peer dep is pi itself, which omp doesn't need. Keys come from the
+# `langfuse` provider; the agent wrappers point LANGFUSE_BASE_URL at the local instance.
+RUN npm install --no-audit --no-fund --legacy-peer-deps --prefix /usr/local/lib/omp-extensions pi-langfuse \
+	&& omp plugin link /usr/local/lib/omp-extensions/node_modules/pi-langfuse
+
 RUN chown -R sandbox:sandbox /sandbox/agent
 
 USER sandbox

@@ -1,3 +1,7 @@
 [submodule "openshell-source"]
 	path = openshell-source
 	url = git@github.com:NVIDIA/OpenShell.git
+[submodule "langfuse-source"]
+	path = langfuse-source
+	url = git@github.com:langfuse/langfuse.git
+	shallow = true

@@ -6,7 +6,8 @@
 #
 # Dependencies are baked into the image (`make image`); only src/ and the config files are
 # bind-mounted, so edits on the host hot-reload in the dev server. The only egress is the
-# launcher (host.openshell.internal:8787), which must already be running on the host:
+# launcher (host.openshell.internal:8787) and Langfuse (host.openshell.internal:3000, traces;
+# make -C factory/langfuse up). The launcher must already be running on the host:
 #   cd factory/launcher && cargo run
 set -euo pipefail
 
@@ -25,7 +26,7 @@ if [[ "$(curl -s -o /dev/null -m 3 -w '%{http_code}' http://127.0.0.1:8787/healt
 fi
 
 CMD=(openshell sandbox create --name "$NAME" --from factory-orchestrator:local
-  --policy "$FLEET/policies/dev.yaml" --provider launcher --env LANGSMITH_TRACING=false --env CHOKIDAR_USEPOLLING=true
+  --policy "$FLEET/policies/dev.yaml" --provider launcher --provider langfuse --env LANGSMITH_TRACING=false --env CHOKIDAR_USEPOLLING=true
   --driver-config-json "$MOUNT")
 
 if [[ "${1:-}" == "--" ]]; then

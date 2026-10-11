@@ -41,6 +41,52 @@ curl -s localhost:2024/runs/wait -H 'content-type: application/json' \
   -d '{"assistant_id":"factory","input":{"task":"What is 17 * 23? Reply with only the number."}}'
 ```
 
+## Langfuse (tracing)
+
+Self-hosted Langfuse runs on podman from the upstream compose file in the `langfuse-source`
+submodule (pinned to a release tag, unmodified). `factory/langfuse/` only layers local changes on
+top: telemetry off, GHCR images (Docker Hub rate-limits anonymous pulls), and Postgres on host
+port 5433 (5432 is often taken). Upstream default passwords are kept: it's local dev only.
+
+```bash
+make -C factory/langfuse up          # http://localhost:3000
+make -C factory/langfuse logs | ps | down
+make -C factory/langfuse upgrade TAG=v4.57.0
+```
+
+First time: sign up at http://localhost:3000, create an org and project, create API keys, and
+store them in 1Password. Then point the `langfuse` provider at the local instance (sandboxes
+reach it as `host.openshell.internal:3000`):
+
+```bash
+LANGFUSE_PUBLIC_KEY=$(op read "op://<vault>/<item>/public key") \
+LANGFUSE_SECRET_KEY=$(op read "op://<vault>/<item>/secret key") \
+LANGFUSE_BASE_URL=http://host.openshell.internal:3000 \
+LANGFUSE_HOST_URL=http://host.openshell.internal:3000 \
+  openshell provider update langfuse --credential LANGFUSE_PUBLIC_KEY --credential LANGFUSE_SECRET_KEY \
+    --credential LANGFUSE_BASE_URL --credential LANGFUSE_HOST_URL
+```
+
+The orchestrator sandbox gets the `langfuse` provider, and `src/tracing.ts` traces every graph
+run (one span per node) through `@langfuse/langchain`'s `CallbackHandler` and OpenTelemetry. The
+provider's `LANGFUSE_BASE_URL` is a placeholder inside the sandbox, so the endpoint comes from
+`FACTORY_LANGFUSE_URL` (default `http://host.openshell.internal:3000`). Langfuse v4 runs in
+events-only mode, so `/api/public/traces` is gone; use the UI (Tracing) to look at runs.
+
+The agents trace themselves with the [pi-langfuse](https://pi.dev/packages/pi-langfuse) extension
+(a `pi-agent` trace per prompt: turns, LLM generations, tool calls), baked into every persona
+image: `pi install npm:pi-langfuse` for pi, and npm + `omp plugin link` for omp (`omp install`
+needs bun). It reads the provider's `LANGFUSE_BASE_URL` placeholder as its host, so both agent
+wrappers (`openshell/launch.sh` and the launcher's exec) replace a placeholder with
+`http://host.openshell.internal:3000`. Its default privacy preset is `full-debug` (prompts, tool
+I/O, system prompts); set `LANGFUSE_PRIVACY_PRESET` to capture less.
+
+The two are linked by Langfuse session: the orchestrator uses the LangGraph thread id as its
+trace's session and passes it to the launcher as `session_id`, which becomes
+`pi --session-id <id>` (the harness's `session_id_args`). Langfuse > Sessions then shows a
+thread's `factory` traces next to the `pi-agent` traces they started. (pi-langfuse always starts
+a new root trace, so the agent can't nest under `runAgent` itself.)
+
 ## Launcher API
 
 All routes need `Authorization: Bearer <token>`.
@@ -49,7 +95,7 @@ All routes need `Authorization: Bearer <token>`.
 |---|---|
 | `GET /health` | Gateway health |
 | `GET /personas` | Personas whose harness has `headless_args` in `openshell/harnesses/<h>.json` (pi only; omp's headless flags are unverified) |
-| `POST /run {persona, task, timeout_secs?}` | Create sandbox from `persona.json` (image, policy, providers), exec the agent headless in `/sandbox/work`, delete the sandbox, return `exit_code`/`stdout`/`stderr` |
+| `POST /run {persona, task, timeout_secs?, session_id?}` | Create sandbox from `persona.json` (image, policy, providers), exec the agent headless in `/sandbox/work`, delete the sandbox, return `exit_code`/`stdout`/`stderr` |
 
 Callers pick a persona and a task, nothing else: policy, providers and mounts are never taken from
 the request. Agent sandboxes get **no host mount**; work happens inside the sandbox.

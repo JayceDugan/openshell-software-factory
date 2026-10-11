@@ -10,7 +10,7 @@
 //!
 //!   GET  /health    gateway health
 //!   GET  /personas  personas that can run headless
-//!   POST /run       {"persona": "...", "task": "...", "timeout_secs": 900}
+//!   POST /run       {"persona": "...", "task": "...", "timeout_secs": 900, "session_id": "<uuid>"}
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -59,6 +59,10 @@ struct Persona {
 struct Harness {
     #[serde(default)]
     headless_args: Option<Vec<String>>,
+    /// Flag(s) that set the agent's session id, followed by the id. pi-langfuse uses it as the
+    /// Langfuse session, which groups the agent's trace with the orchestrator run that started it.
+    #[serde(default)]
+    session_id_args: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -66,6 +70,8 @@ struct RunRequest {
     persona: String,
     task: String,
     timeout_secs: Option<u64>,
+    /// Optional; ignored for harnesses without `session_id_args`.
+    session_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -188,7 +194,7 @@ async fn personas_handler(State(state): State<Shared>) -> Result<Json<serde_json
 
 /// Resolve a persona name to its manifest and harness headless args, refusing anything that is
 /// not a plain directory name under personas/ or whose harness has no verified headless mode.
-fn load_runnable(root: &Path, name: &str) -> Result<(Persona, Vec<String>), ApiError> {
+fn load_runnable(root: &Path, name: &str) -> Result<(Persona, Vec<String>, Vec<String>), ApiError> {
     let valid = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
     if !valid {
         return Err(bad_request(format!("invalid persona name {name:?}")));
@@ -200,7 +206,7 @@ fn load_runnable(root: &Path, name: &str) -> Result<(Persona, Vec<String>), ApiE
     let args = harness
         .headless_args
         .ok_or_else(|| bad_request(format!("harness {} has no verified headless_args", persona.harness)))?;
-    Ok((persona, args))
+    Ok((persona, args, harness.session_id_args))
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
@@ -209,9 +215,19 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
 }
 
 async fn run_handler(State(state): State<Shared>, Json(req): Json<RunRequest>) -> Result<Json<RunResponse>, ApiError> {
-    let (persona, headless_args) = load_runnable(&state.fleet_root, &req.persona)?;
+    let (persona, mut headless_args, session_id_args) = load_runnable(&state.fleet_root, &req.persona)?;
     if req.task.trim().is_empty() {
         return Err(bad_request("task is empty"));
+    }
+    if let Some(id) = &req.session_id {
+        let valid = !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+        if !valid {
+            return Err(bad_request(format!("invalid session_id {id:?}")));
+        }
+        if !session_id_args.is_empty() {
+            headless_args.extend(session_id_args);
+            headless_args.push(id.clone());
+        }
     }
     let timeout = Duration::from_secs(req.timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS).min(MAX_TIMEOUT_SECS));
     let name = sandbox_name(&state.run_counter);
@@ -305,10 +321,17 @@ async fn run_in_sandbox(
     state.client.wait_ready(name, READY_TIMEOUT).await.map_err(internal)?;
     // `cd /sandbox/work`: OpenShell ignores the image WORKDIR and omp refuses to work in $HOME.
     // `</dev/null`: pi reads non-TTY stdin to EOF and hangs otherwise.
+    // LANGFUSE_BASE_URL: the `langfuse` provider makes it a credential placeholder, which is no
+    // use as a URL to pi-langfuse; point it at the local Langfuse (same as openshell/launch.sh).
     let mut cmd: Vec<String> = vec![
         "sh".into(),
         "-c".into(),
-        r#"mkdir -p /sandbox/work 2>/dev/null; cd /sandbox/work || exit 1; exec "$@" </dev/null"#.into(),
+        concat!(
+            "case \"${LANGFUSE_BASE_URL:-}\" in openshell:resolve:*) ",
+            "export LANGFUSE_BASE_URL=http://host.openshell.internal:3000;; esac; ",
+            r#"mkdir -p /sandbox/work 2>/dev/null; cd /sandbox/work || exit 1; exec "$@" </dev/null"#,
+        )
+        .into(),
         "sh".into(),
     ];
     cmd.extend(persona.launch_cmd.split_whitespace().map(String::from));

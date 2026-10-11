@@ -9,8 +9,9 @@
 //   Nodes: plain async functions, (state) => partial state.
 //   Edges: fixed ("always go to X") or conditional (a function that picks the next node).
 
-import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { Annotation, END, START, StateGraph, type LangGraphRunnableConfig } from "@langchain/langgraph";
 import * as launcher from "./launcher.js";
+import { callbacks } from "./tracing.js";
 
 const State = Annotation.Root({
   // Input: what the agent should do. Leave it empty to only check connectivity.
@@ -31,8 +32,10 @@ async function ping(): Promise<Partial<FactoryState>> {
   return { launcher: `launcher ${h.launcher}, gateway ${h.gateway} ${h.version}` };
 }
 
-async function runAgent(state: FactoryState): Promise<Partial<FactoryState>> {
-  const result = await launcher.run(state.persona, state.task);
+async function runAgent(state: FactoryState, config: LangGraphRunnableConfig): Promise<Partial<FactoryState>> {
+  // The thread id is also this run's Langfuse session (tracing.ts); the agent's trace joins it.
+  const threadId = config.configurable?.thread_id as string | undefined;
+  const result = await launcher.run(state.persona, state.task, threadId);
 
   return {
     reply: launcher.finalText(result.stdout),
@@ -51,6 +54,8 @@ export const graph = new StateGraph(State)
   .addEdge(START, "ping")
   .addConditionalEdges("ping", afterPing, ["runAgent", END])
   .addEdge("runAgent", END)
-  .compile();
+  .compile()
+  // Every run (Studio, HTTP API) is traced to Langfuse; see tracing.ts.
+  .withConfig({ callbacks });
 
 graph.name = "factory";

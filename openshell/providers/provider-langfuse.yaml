@@ -41,6 +41,16 @@ discovery:
   credentials: [public_key, secret_key, host_url, base_url, user_id]
 
 endpoints:
+  # Local self-hosted instance: factory/langfuse (podman compose on this machine).
+  - host: host.openshell.internal
+    port: 3000
+    path: /api/public/**
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+    deny_rules:
+      - method: DELETE
+        path: /api/public/**
   - host: homelab
     port: 3000
     path: /api/public/**

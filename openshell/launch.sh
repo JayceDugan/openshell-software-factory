@@ -141,7 +141,10 @@ CMD+=(--)
 # `trap :` (not `trap ''`) keeps a stray SIGINT from killing the shim without the agent
 # inheriting an ignored SIGINT. `kill -1` is EPERM in OpenShell, so signal PIDs one by one,
 # skipping PID 1 (the supervisor) and the shim itself.
+# LANGFUSE_BASE_URL: the `langfuse` provider turns it into a credential placeholder, which
+# pi-langfuse can't use as a URL, so point it at the local Langfuse (factory/langfuse).
 CMD+=(sh -c 'cd /sandbox/work || exit 1
+case "${LANGFUSE_BASE_URL:-}" in openshell:resolve:*) export LANGFUSE_BASE_URL=http://host.openshell.internal:3000;; esac
 trap : INT
 "$@"; rc=$?
 reap() { for p in $(ps -eo pid=); do [ "$p" -ne 1 ] && [ "$p" -ne $$ ] && kill -"$1" "$p"; done 2>/dev/null; }

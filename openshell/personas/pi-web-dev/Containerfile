@@ -38,6 +38,9 @@ COPY shared/skills/ /sandbox/agent/skills/
 
 # After the payload copy: `pi install` rewrites settings.json, so it must come last.
 RUN pi install npm:@juicesharp/rpiv-ask-user-question
+# Langfuse tracing (sessions, LLM calls, tool calls). Keys come from the `langfuse` provider;
+# the agent wrappers point LANGFUSE_BASE_URL at the local instance.
+RUN pi install npm:pi-langfuse
 
 RUN chown -R sandbox:sandbox /sandbox/agent
 

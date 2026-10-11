@@ -1,0 +1,13 @@
+# Local changes layered on langfuse-source/docker-compose.yml, so the submodule stays pristine
+# and upgrades are just a tag bump.
+services:
+  # docker.langfuse.com is served from Docker Hub, whose anonymous pull limit is easy to hit.
+  # The same images are published to GHCR.
+  langfuse-web:
+    image: ghcr.io/langfuse/langfuse:4
+  langfuse-worker:
+    image: ghcr.io/langfuse/langfuse-worker:4
+  postgres:
+    # 5432 is often taken on this machine (another project's Postgres); publish on 5433 instead.
+    ports: !override
+      - 127.0.0.1:5433:5432

@@ -52,10 +52,11 @@ export const health = () => call<{ launcher: string; gateway: string; version: s
 
 export const personas = () => call<{ personas: string[] }>("/personas");
 
-export const run = (persona: string, task: string, timeoutSecs = 900) =>
+/** `sessionId` becomes the agent's session id, and with it the Langfuse session of its trace. */
+export const run = (persona: string, task: string, sessionId?: string, timeoutSecs = 900) =>
   call<RunResult>("/run", {
     method: "POST",
-    body: JSON.stringify({ persona, task, timeout_secs: timeoutSecs }),
+    body: JSON.stringify({ persona, task, session_id: sessionId, timeout_secs: timeoutSecs }),
   });
 
 /** pi `--mode json` prints one event per line; the agent's answer is the text of the last turn. */
