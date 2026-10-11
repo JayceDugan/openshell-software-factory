@@ -1,0 +1,22 @@
+# Orchestrator sandbox: Node + the LangGraph dev server with its dependencies baked in.
+# npm runs here, at image build time, and never on the host or inside a running sandbox
+# (big installs outlive OpenShell's 30s transparent-proxy DNS mappings). At runtime run.sh
+# bind-mounts only src/ and langgraph.json over /sandbox/work.
+#
+# Adding a dependency: edit package.json, then `make image` (rebuilds and copies the
+# regenerated package-lock.json back out).
+ARG BASE_IMAGE=ghcr.io/nvidia/openshell-community/sandboxes/base:latest
+FROM ${BASE_IMAGE}
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+ENV NPM_CONFIG_CACHE=/tmp/npm-cache
+USER root
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates curl jq \
+	&& rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /sandbox/work && chown -R sandbox:sandbox /sandbox/work
+USER sandbox
+WORKDIR /sandbox/work
+COPY --chown=sandbox:sandbox package.json package-lock.json* ./
+# `npm install`, not `npm ci`: it keeps the lockfile's pins but accepts new package.json entries.
+RUN npm install --no-audit --no-fund \
+	&& rm -rf /tmp/npm-cache

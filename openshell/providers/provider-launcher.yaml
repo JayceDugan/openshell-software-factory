@@ -1,0 +1,24 @@
+id: launcher
+resource_version: 1
+display_name: Factory launcher
+description: Host-side factory launcher (factory/launcher) that starts persona sandboxes for the LangGraph orchestrator
+category: agent
+inference_capable: false
+credentials:
+  - name: token
+    description: Bearer token the launcher requires on every request
+    env_vars:
+      - FACTORY_LAUNCHER_TOKEN
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials:
+    - token
+endpoints:
+  - host: host.openshell.internal
+    port: 8787
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries: [/usr/bin/curl, /usr/local/bin/curl, /usr/local/bin/node, /usr/bin/node]

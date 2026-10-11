@@ -32,7 +32,8 @@ fresh headless sandbox. That orchestrator doesn't exist yet. What this repo has 
 | `pi-planner` | pi | review | read-only | Recon of the codebase and an architecture plan, written to `/tmp` |
 
 **Providers** (`openshell/providers/`) are network and credential grants: `bifrost` (inference), `context7`
-(docs MCP), `langfuse` (tracing), `npm`, `googlefonts`, `vllm`, `ninfer`, and `unsloth`. A GitHub profile is drafted
+(docs MCP), `langfuse` (tracing), `npm`, `googlefonts`, `vllm`, `ninfer`, `unsloth`, and `launcher` (the
+[factory](factory/README.md) orchestrator's route to the host launcher). A GitHub profile is drafted
 in `provider-github.yaml.draft` but not applied yet.
 
 **Shared assets** (`openshell/shared/`): house rules (Context7 first, codemode), role files, Agent Skills (`web-dev`),

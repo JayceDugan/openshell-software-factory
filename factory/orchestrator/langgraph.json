@@ -1,0 +1,6 @@
+{
+  "node_version": "22",
+  "graphs": {
+    "factory": "./src/graph.ts:graph"
+  }
+}

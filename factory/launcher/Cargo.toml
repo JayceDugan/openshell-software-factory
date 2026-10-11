@@ -1,0 +1,16 @@
+[package]
+name = "factory-launcher"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Host-side launcher: the only way the sandboxed orchestrator can start persona sandboxes"
+
+[dependencies]
+openshell-sdk = { path = "../../openshell-source/crates/openshell-sdk" }
+openshell-core = { path = "../../openshell-source/crates/openshell-core" }
+openshell-policy = { path = "../../openshell-source/crates/openshell-policy" }
+tonic = { version = "0.14", features = ["channel", "tls-aws-lc"] }
+tokio = { version = "1.43", features = ["full"] }
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
