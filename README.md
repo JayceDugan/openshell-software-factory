@@ -1,16 +1,250 @@
 # software-factory
 
-Coding agents ([pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) and
-[omp](https://github.com/can1357/oh-my-pi)) that run **only inside [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell)
-sandboxes**. They don't run on the host. You start one from any directory with a single command. That directory is
-bind-mounted into the sandbox, and the agent gets the role, tools, filesystem policy, and network grants that its
-persona allows.
+This repository contains coding agents ([pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) and
+[omp](https://github.com/can1357/oh-my-pi)) and a system that controls them. The agents run **only in
+[NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) sandboxes**. They do not run on the host.
 
-This is the per-step runtime for a larger software factory: an outer loop (LangGraph) that runs each step in a
-fresh headless sandbox. The first version of that loop is in [`factory/`](factory/README.md): a LangGraph
-orchestrator, a small host-side launcher that starts persona sandboxes, and self-hosted Langfuse for tracing.
+Each agent gets only the files, network access, and credentials that its persona permits. An agent cannot read
+the rest of your disk, your credentials, or the internet.
 
-## Architecture
+## What do you want to do?
+
+| You want to… | Go to |
+|---|---|
+| Run an agent on a repository, from any directory | [Run an agent](#run-an-agent) |
+| Run a task through the factory loop and look at the traces | [Run the factory](#run-the-factory) |
+| Add a persona, a skill, a provider, or change the model | [Change the fleet](#change-the-fleet) |
+| Know why an agent fails or waits | [Known problems](#known-problems) |
+| Know how the parts work together | [How it works](#how-it-works) |
+
+## Before you start (one time)
+
+You need these items for all workflows:
+
+- **Podman** with a machine that runs. To start it, run `podman machine start`.
+- **OpenShell CLI** (tested with 0.1.1). To check it, run `openshell --version`.
+- **node or python3** on the host. `launch.sh` and `build.sh` use them to read `persona.json`.
+- Bind mounts must be enabled in the gateway configuration at `~/.config/openshell/gateway.toml`:
+
+  ```toml
+  [openshell.drivers.podman]
+  allow_driver_config = true
+  enable_bind_mounts = true
+  ```
+
+- The Podman VM must have a connection to Bifrost at `homelab:8080`. Bifrost serves the model. Refer to
+  [Model and inference endpoint](#model-and-inference-endpoint).
+
+## Run an agent
+
+Use this workflow to give an agent a task in a repository on your computer. The agent works on the directory that
+you start it from.
+
+### 1. Register the providers
+
+Providers give the sandbox network access and credentials. Register them one time:
+
+```bash
+cd ~/Projects/software-factory/openshell
+make providers                                          # push every providers/provider-*.yaml profile
+openshell provider create --name bifrost --type bifrost # one provider per profile you use
+openshell provider create --name context7 --type context7 --credential CONTEXT7_API_KEY   # reads it from your env
+openshell provider list                                 # check
+```
+
+Some providers have no credentials: `bifrost`, `npm`, `googlefonts`, `vllm`, and `ninfer`. For these providers,
+give only `--name` and `--type`. For `langfuse`, refer to [Look at the traces](#look-at-the-traces).
+
+### 2. Build the images
+
+```bash
+./build.sh                 # harness images (cached) + all personas
+./build.sh pi-web-dev      # one persona; edits to instructions/skills rebuild in seconds
+./build.sh --dry-run       # print the podman commands only
+```
+
+The first build is slow. After that, a persona builds again in seconds.
+
+### 3. Add the `agent` command to your shell
+
+With this function, you can start an agent from all directories. Add it to `~/.zshrc`. It also operates in
+`~/.bashrc`.
+
+```sh
+# software-factory: launch a sandboxed agent persona on the current directory
+export SOFTWARE_FACTORY="$HOME/Projects/software-factory"
+
+agent() {
+  local launch="$SOFTWARE_FACTORY/openshell/launch.sh"
+  if [ $# -eq 0 ]; then "$launch" --list; return; fi
+  "$launch" "$@"
+}
+
+agent-build() { "$SOFTWARE_FACTORY/openshell/build.sh" "$@"; }
+
+# zsh: tab-complete persona names
+if [ -n "$ZSH_VERSION" ] && (( $+functions[compdef] )); then
+  _agent() { compadd -- $(command ls "$SOFTWARE_FACTORY/openshell/personas"); }
+  compdef _agent agent agent-build
+fi
+```
+
+To load the function, run `source ~/.zshrc`.
+
+### 4. Select a persona
+
+A persona is one type of agent. It sets the harness (the agent CLI), the role, the skills, the filesystem policy,
+and the providers.
+
+| Persona | Harness | Policy | Mount | Use it to |
+|---|---|---|---|---|
+| `pi-general-dev` | pi | dev | read-write | Do general development. It has no skills for a specified stack. Also use it to test models and the harness. |
+| `pi-web-dev` | pi | dev | read-write | Work on React, Next.js, and Vite. Headless Chromium (`agent-browser`) serves the app and examines it. |
+| `omp-web-dev` | omp | dev | read-write | Do the same work as `pi-web-dev`, on the omp harness. |
+| `pi-pr-reviewer` | pi | review | read-only | Review the mounted repository. It does not change code. |
+| `pi-planner` | pi | review | read-only | Examine the codebase and write an architecture plan to `/tmp`. |
+
+### 5. Start the agent
+
+Go to the repository. Then start a persona:
+
+```bash
+agent                                   # list personas
+cd ~/repos/my-next-app
+agent pi-web-dev --dry-run              # print the exact openshell command; read it first
+agent pi-web-dev                        # start pi on this repo, read-write
+agent pi-pr-reviewer                    # same repo, read-only reviewer
+agent pi-planner --mount ~/repos/other  # mount a different directory
+agent pi-general-dev --no-mount         # no host files at all
+agent pi-general-dev -- -p --no-session --mode json "summarise this repo" </dev/null   # headless
+```
+
+Your current directory becomes `/sandbox/work` in the sandbox, and the agent starts there. When the agent stops,
+the sandbox is deleted.
+
+### `launch.sh` options
+
+| Flag | Effect |
+|---|---|
+| `--dry-run` | Shows the full `openshell sandbox create …` command. Runs nothing. |
+| `--mount <path>` | Mounts this host path at `/sandbox/work`, not `$PWD`. |
+| `--no-mount` | Mounts nothing. Use it with `--policy policies/strict.yaml`. |
+| `--ro` | Makes the mount read-only. |
+| `--policy <file>` | Replaces the policy of the persona. |
+| `--provider <id>` / `--no-provider` | Adds a provider to the list of the persona, or removes all providers. |
+| `--name <name>` | Sets the sandbox name. The default is the persona name. |
+| `--keep` | Keeps the sandbox after the agent stops. |
+| `--env K=V` | Gives an environment variable to the sandbox. You can use it more than one time. |
+| `-- <args>` | Gives more arguments to the agent CLI. |
+
+You can also use `make`: `make list`, `make run-pi-web-dev MOUNT=~/repos/app`, `make dry-pi-planner`.
+
+## Run the factory
+
+The factory is the outer loop. A LangGraph graph sends each step to a new headless persona sandbox. The graph runs
+in its own sandbox. A small launcher on the host starts the persona sandboxes. This is the first version: the graph
+runs one agent on one task.
+
+[`factory/README.md`](factory/README.md) gives all of the details. The short procedure is:
+
+```bash
+# 1. Once: token + provider (the token lives in the gateway, never in the orchestrator sandbox)
+mkdir -p ~/.config/factory && (umask 077; openssl rand -hex 32 > ~/.config/factory/launcher.token)
+make -C openshell/providers update-launcher
+FACTORY_LAUNCHER_TOKEN=$(cat ~/.config/factory/launcher.token) \
+  openshell provider create --name launcher --type launcher --credential FACTORY_LAUNCHER_TOKEN
+
+# 2. Once, and after changing package.json: build the orchestrator image (npm runs here)
+make -C factory/orchestrator image
+
+# 3. Terminal A: the launcher
+cd factory/launcher && cargo run
+
+# 4. Terminal B: the orchestrator; then open the Studio URL it prints
+make -C factory/orchestrator dev
+```
+
+Open the Studio URL to see the graph and to start runs. Studio asks for a free LangSmith login. You can also start
+a run over HTTP:
+
+```bash
+curl -s localhost:2024/runs/wait -H 'content-type: application/json' \
+  -d '{"assistant_id":"factory","input":{"task":"What is 17 * 23? Reply with only the number."}}'
+```
+
+### Look at the traces
+
+A self-hosted Langfuse records the traces of the orchestrator and of each agent. To start it, run:
+
+```bash
+make -C factory/langfuse up          # http://localhost:3000
+```
+
+The first time, make an account, a project, and API keys at http://localhost:3000. Keep the keys in your password
+manager. Then give the keys to the `langfuse` provider.
+[`factory/README.md`](factory/README.md#langfuse-tracing) shows the command.
+
+In Langfuse, open **Sessions**. Each session is one LangGraph thread. It shows the `factory` traces and the
+`pi-agent` traces that they started.
+
+## Change the fleet
+
+### Add a persona
+
+1. **Role:** Use a file in `shared/instructions/roles/`, or write one new file for a new job.
+2. **Payload:** Run `mkdir -p personas/<name>/payload`. Copy a payload from a different persona on the same
+   harness.
+3. **Manifest:** Write `persona.json`. Set the harness, image tag, policy, providers, `launch_cmd`,
+   `mount_default`, and `mount_read_only`.
+4. **Containerfile:** Copy the Containerfile from a different persona on the same harness. Change the role file and
+   the payload path.
+5. **Build:** Run `./build.sh <name>`.
+6. **Check:** Run `./launch.sh <name> --dry-run`. Read the command that it shows before you run it.
+
+[docs/personas.md](openshell/docs/personas.md) gives the full procedure.
+
+### Add a skill
+
+Put a directory with a `SKILL.md` file into `openshell/shared/skills/`. Then build the personas again. pi and omp
+both read the same skills.
+
+### Add network access
+
+Egress is denied by default. If a role needs a new capability, add a provider profile first. Examples are the
+GitHub API or a different package registry. Refer to [docs/providers.md](openshell/docs/providers.md).
+
+### Change the model
+
+Edit the persona payloads. For pi, edit `models.json` and `settings.json` (`defaultModel`). For omp, edit
+`models.yml` and `config.yml`. Then build that persona again. Refer to [docs/models.md](openshell/docs/models.md).
+
+### More guides
+
+The guides in [`openshell/docs/`](openshell/docs/README.md) give more information:
+
+- [Providers](openshell/docs/providers.md), with the difference between profiles and providers.
+- [Personas](openshell/docs/personas.md).
+- [Roles and skills](openshell/docs/roles-and-skills.md).
+- [Policies](openshell/docs/policies.md).
+- [Harnesses](openshell/docs/harnesses.md).
+- [Models](openshell/docs/models.md).
+- [Running and debugging](openshell/docs/running-and-debugging.md).
+
+## Known problems
+
+- **Headless pi needs a closed stdin** (`</dev/null`). If stdin is open, pi waits for it and does not stop.
+- pi `--mode json` can stop with exit code 0 after a model error and a retry. Thus, do not use the exit code to
+  find the result. Use `agent_settled` and the last `stopReason`.
+- In the sandbox, use `http://localhost:PORT`. Do not use `127.0.0.1`. The sandbox drops IPv4 loopback traffic.
+- When `pi-web-dev` runs `npm install` in the sandbox, `node_modules` gets Linux binaries. After this, run
+  `npm install` on the host again.
+- The reviewer needs a GitHub provider to get PRs directly. That provider is only a draft now.
+- [`openshell/DESIGN.md`](openshell/DESIGN.md) shows the tests that passed end to end. It also shows the known
+  problems of each harness. [`factory/README.md`](factory/README.md) shows the known problems of the factory.
+
+## How it works
+
+### Architecture
 
 ```mermaid
 flowchart LR
@@ -36,55 +270,31 @@ flowchart LR
   agent -- "traces · same session" --> lfweb
 ```
 
-- **One trusted host process.** Only the launcher talks to the gateway. The orchestrator can ask it to run a
-  persona on a task, but image, policy and providers always come from `persona.json`.
-- **Credentials stay in the gateway.** Sandboxes see placeholders; OpenShell's proxy swaps in the real launcher
-  token and Langfuse keys on the way out, and only to the endpoints each provider allows.
-- **One fresh sandbox per step.** The launcher creates it, runs the agent headless, and deletes it.
-- **Traces are linked by session.** The LangGraph thread id is the Langfuse session for the orchestrator trace and
-  is passed to pi as `--session-id`, so Langfuse > Sessions shows each graph run next to the agent runs it started.
+- **Only one host process has trust.** Only the launcher connects to the gateway. The orchestrator can tell the
+  launcher to run a persona on a task. The image, policy, and providers always come from `persona.json`.
+- **Credentials stay in the gateway.** A sandbox gets only placeholders. The OpenShell proxy replaces each
+  placeholder with the real launcher token or Langfuse key. The proxy does this only for the endpoints that the
+  provider permits.
+- **Each step gets a new sandbox.** The launcher creates the sandbox, runs the agent headless, and deletes the
+  sandbox.
+- **One session links the traces.** The LangGraph thread ID is the Langfuse session of the orchestrator trace. The
+  orchestrator also gives this ID to pi as `--session-id`. Thus, Langfuse > Sessions shows each graph run together
+  with the agent runs that it started.
 
-## What this solves
+### Problems that this design solves
 
-| Problem | What this repo does |
+| Problem | Solution |
 |---|---|
-| Coding agents on the host can read your whole disk, all your credentials, and the whole internet | Each agent runs in an OpenShell sandbox. Landlock limits the filesystem, and network egress is deny-by-default with grants per provider. |
-| One Containerfile per agent means slow rebuilds and copied config | Split into **harness** (the CLI, built once) and **persona** (role text plus config, a thin layer that rebuilds in seconds). |
-| Reviewers and planners shouldn't be able to edit the repo | Role-keyed policies: `review.yaml` mounts the repo **read-only** (both the mount and the policy enforce it). `dev.yaml` mounts it read-write. `strict.yaml` mounts nothing. |
-| Each launch needs a long `openshell sandbox create …` command | `launch.sh` builds the command from `persona.json`. Wrap it in a shell function to run it from anywhere. |
-| Instructions and skills drift between harnesses | Role files and Agent Skills are harness-neutral, so pi and omp read identical `AGENTS.md` and `skills/`. |
+| A coding agent on the host can read all of the disk, all credentials, and all of the internet. | Each agent runs in an OpenShell sandbox. Landlock limits the filesystem. Network egress is denied by default. Each provider permits specified endpoints. |
+| One Containerfile for each agent causes slow builds and copies of the same configuration. | The image has two layers. The **harness** layer contains the CLI and you build it one time. The **persona** layer contains the role text and configuration. This layer is thin and builds in seconds. |
+| Reviewers and planners must not change the repository. | The policy agrees with the role. `review.yaml` mounts the repository **read-only**. The mount and the policy both enforce this. `dev.yaml` mounts the repository read-write. `strict.yaml` mounts nothing. |
+| Each start needs a long `openshell sandbox create …` command. | `launch.sh` makes the command from `persona.json`. Put `launch.sh` in a shell function to use it from all directories. |
+| The instructions and skills of the harnesses become different over time. | The role files and Agent Skills are the same for all harnesses. Thus, pi and omp read the same `AGENTS.md` and `skills/`. |
 
-## What you get
+### How the fleet is made
 
-**Personas** (`openshell/personas/`):
-
-| Persona | Harness | Policy | Mount | Purpose |
-|---|---|---|---|---|
-| `pi-general-dev` | pi | dev | read-write | Baseline developer with no stack-specific skills. Use it to smoke-test models and the harness. |
-| `pi-web-dev` | pi | dev | read-write | React/Next.js/Vite work, plus headless Chromium (`agent-browser`) to serve the app and check it |
-| `omp-web-dev` | omp | dev | read-write | The same role, skills, and browser as `pi-web-dev`, on the omp harness |
-| `pi-pr-reviewer` | pi | review | read-only | Reviews the mounted repo and doesn't change code |
-| `pi-planner` | pi | review | read-only | Recon of the codebase and an architecture plan, written to `/tmp` |
-
-**Providers** (`openshell/providers/`) are network and credential grants: `bifrost` (inference), `context7`
-(docs MCP), `langfuse` (tracing), `npm`, `googlefonts`, `vllm`, `ninfer`, `unsloth`, and `launcher` (the
-[factory](factory/README.md) orchestrator's route to the host launcher). A GitHub profile is drafted
-in `provider-github.yaml.draft` but not applied yet.
-
-**Shared assets** (`openshell/shared/`): house rules (Context7 first, codemode), role files, Agent Skills (`web-dev`),
-and the headless browser layer.
-
-**Working in this codebase?** Guides for the common workflows are in [`openshell/docs/`](openshell/docs/README.md):
-[providers](openshell/docs/providers.md), including profiles vs providers;
-[personas](openshell/docs/personas.md); [roles and skills](openshell/docs/roles-and-skills.md);
-[policies](openshell/docs/policies.md); [harnesses](openshell/docs/harnesses.md); [models](openshell/docs/models.md);
-and [running and debugging](openshell/docs/running-and-debugging.md). For what has been verified end to end and the
-harness quirks, see [`openshell/DESIGN.md`](openshell/DESIGN.md).
-
-## How the fleet is composed
-
-The goal is many agents from few images, with fast spin-up. A Containerfile per agent would mix several things
-that change independently, so each one gets its own axis instead:
+The objective is many agents from few images, with fast starts. One Containerfile for each agent mixes items that
+change independently. Thus, each item has its own axis:
 
 ```
 HARNESS   = the coding-agent CLI in the image              pi, omp  (later: claude, codex, opencode)
@@ -95,8 +305,8 @@ PROVIDERS = network + credential grants, fleet-wide         bifrost, context7, n
 PERSONA   = harness + role + skills + config payload        pi-web-dev, omp-web-dev, pi-pr-reviewer, ...
 ```
 
-**A persona is the only per-agent thing.** It picks one value from each of the other axes. All of those values
-are shared, so adding an agent mostly means choosing values that already exist.
+**The persona is the only item that is specific to one agent.** A persona selects one value from each of the other
+axes. All agents share these values. Thus, to add an agent, you usually select values that exist.
 
 ```
                  ┌──────────── shared/instructions/house-rules.md ─┐
@@ -108,21 +318,28 @@ openshell-pi-harness:local ──► personas/pi-web-dev ──► image pi-web-
                                 └─ persona.json        ──► policy dev.yaml + providers [bifrost, context7, npm, ...]
 ```
 
-### Harnesses: built once
+Personas cost little. Harnesses are the expensive axis. The five personas in this repository need only two harness
+builds.
 
-`images/<harness>/Containerfile` holds the OpenShell base sandbox, apt tools, and the agent CLI
-(`npm i -g @earendil-works/pi-coding-agent`, or omp). It contains **no role text and no config**.
-`harnesses/<harness>.json` records each CLI's plumbing in machine-readable form: the agent dir env var, the launch
-command, the config file names, and its quirks. A harness image is the slow build, and every persona on that
-harness reuses its cached copy.
+#### Harnesses: you build each one one time
 
-### Personas: a thin layer on a harness
+`images/<harness>/Containerfile` contains the OpenShell base sandbox, the apt tools, and the agent CLI. For pi, the
+command is `npm i -g @earendil-works/pi-coding-agent`. The harness image contains **no role text and no
+configuration**.
 
-Each `personas/<name>/` has three parts:
+`harnesses/<harness>.json` describes the setup of each CLI in a format that a program can read. It gives the
+environment variable for the agent directory, the start command, the configuration file names, and the known
+problems.
 
-- **`persona.json`** is the manifest read by `build.sh` and `launch.sh`. It sets the harness, image tag, policy,
-  provider list, launch command, `mount_default`, and `mount_read_only`.
-- **`Containerfile`** is `FROM` the harness image, then assembles the persona:
+The harness image is the slow build. All personas on that harness use the cached copy.
+
+#### Personas: a thin layer on a harness
+
+Each `personas/<name>/` directory has three parts:
+
+- **`persona.json`** is the manifest. `build.sh` and `launch.sh` read it. It sets the harness, image tag, policy,
+  provider list, start command, `mount_default`, and `mount_read_only`.
+- **`Containerfile`** starts `FROM` the harness image. Then it assembles the persona:
 
   ```dockerfile
   FROM openshell-pi-harness:local
@@ -133,198 +350,103 @@ Each `personas/<name>/` has three parts:
   RUN pi install npm:@juicesharp/rpiv-ask-user-question # last: pi install rewrites settings.json
   ```
 
-- **`payload/`** is **harness config only**: the model, provider, and MCP settings. It never holds instructions.
+- **`payload/`** contains **only the harness configuration**: the model, provider, and MCP settings. It never
+  contains instructions.
 
-The persona layer never changes the harness, and the harness never contains role text. Editing a role or skill
-rebuilds one thin layer in seconds.
+The persona layer does not change the harness. The harness does not contain role text. When you change a role or
+a skill, only one thin layer builds again.
 
-Optional capabilities are extra layers in the persona's Containerfile. For example, the `*-web-dev` personas run
-`shared/browser/install.sh`, which installs Playwright's Chromium and the `agent-browser` skill, and they set the
-Chrome flags that OpenShell requires.
+Optional capabilities are more layers in the Containerfile of the persona. For example, the `*-web-dev` personas
+run `shared/browser/install.sh`. This script installs the Chromium of Playwright and the `agent-browser` skill. These
+personas also set the Chrome flags that OpenShell requires.
 
-### Roles and skills: harness-neutral
+All persona images include the [pi-langfuse](https://pi.dev/packages/pi-langfuse) extension. This extension sends
+the traces of the agent to Langfuse.
 
-- **House rules** (`shared/instructions/house-rules.md`) go into every agent: use Context7 for docs, call MCP tools
-  via codemode, and so on.
-- **Roles** (`shared/instructions/roles/<role>.md`) define the job and its definition of done. `AGENTS.md` is built
-  at image build time as `house-rules.md` + `<role>.md`. So one role file serves any harness: `pi-web-dev` and
-  `omp-web-dev` read identical instructions.
-- **Skills** (`shared/skills/<skill>/SKILL.md`) follow the Agent Skills spec. pi and omp both implement it and both
-  scan `<agent-dir>/skills/`, so a skill is written once and works in every persona. Roles tell the agent which
-  skills to load (`/skill:web-dev`, `/skill:agent-browser`).
+#### Roles and skills: the same for all harnesses
 
-### Two conventions that make it composable
+- **House rules** (`shared/instructions/house-rules.md`) go into all agents. For example, they tell the agent to
+  use Context7 for documentation and to use codemode for MCP tools.
+- **Roles** (`shared/instructions/roles/<role>.md`) set the job and the conditions for a completed job. The build
+  makes `AGENTS.md` from `house-rules.md` and `<role>.md`. Thus, one role file is correct for all harnesses.
+  `pi-web-dev` and `omp-web-dev` read the same instructions.
+- **Skills** (`shared/skills/<skill>/SKILL.md`) obey the Agent Skills specification. pi and omp both use this
+  specification, and both read `<agent-dir>/skills/`. Thus, you write a skill one time and it operates in all
+  personas. The roles tell the agent which skills to load (`/skill:web-dev`, `/skill:agent-browser`).
 
-**1. Every harness uses one writable agent dir: `/sandbox/agent`.** Harness images set
-`PI_CODING_AGENT_DIR=/sandbox/agent`. pi relocates its agent dir with that variable, and so does omp for its
-default profile. Payloads, `AGENTS.md`, skills, sessions, and caches all live there. As a result, a policy never
-needs to know which harness is running: it grants `/sandbox/agent` plus `/tmp`, and that's enough.
+#### Two rules that make the parts work together
 
-**2. Share the skills and role text, and keep the plumbing per harness.** Only config file names and formats
-differ:
+**1. All harnesses use one writable agent directory: `/sandbox/agent`.** The harness images set
+`PI_CODING_AGENT_DIR=/sandbox/agent`. pi uses this variable to move its agent directory. omp also uses it for its
+default profile. The payloads, `AGENTS.md`, skills, sessions, and caches are all in this directory. Thus, a policy
+does not have to know the harness. It gives access to `/sandbox/agent` and `/tmp`, and that is sufficient.
+
+**2. Share the skills and role text. Keep the setup specific to each harness.** Only the configuration file names
+and formats are different:
 
 | | pi | omp |
 |---|---|---|
 | agent config dir | `$PI_CODING_AGENT_DIR` | `$PI_CODING_AGENT_DIR` (default profile only) |
 | config files | `settings.json`, `models.json`, `mcp.json` | `config.yml`, **`models.yml` (YAML)**, `mcp.json` |
 | project config | `.pi/` | `.omp/` |
-| profiles | none | `--profile x` exists, but named profiles **ignore** `PI_CODING_AGENT_DIR`, so don't use them |
+| profiles | none | `--profile x` exists, but named profiles **ignore** `PI_CODING_AGENT_DIR`, so do not use them |
 
-So payloads aren't shared or symlinked across harnesses. Everything else is shared.
+Thus, the harnesses do not share payloads, and there are no symbolic links between them. The harnesses share all
+other items.
 
-### Policies: chosen by role, not by persona
+#### Policies: the role sets the policy
 
 | Role | Writes code? | Policy | Filesystem |
 |---|---|---|---|
-| developer | yes, in the mounted repo | `policies/dev.yaml` | `/sandbox/work` read-write, plus `/tmp` and the agent dir |
-| PR reviewer | no, it only comments | `policies/review.yaml` | repo mounted read-only **and** listed read-only in the policy (defense in depth). The agent dir stays writable for sessions. |
-| planner | no, it writes a plan to `/tmp` | `policies/review.yaml` | same as the reviewer |
-| untrusted input | maybe | `policies/strict.yaml` | no host mount. Collect output with `openshell sandbox cp`. |
+| developer | yes, in the mounted repository | `policies/dev.yaml` | `/sandbox/work` read-write, plus `/tmp` and the agent directory |
+| PR reviewer | no, it only writes comments | `policies/review.yaml` | The repository is mounted read-only **and** the policy lists it as read-only (two layers of protection). The agent directory stays writable for sessions. |
+| planner | no, it writes a plan to `/tmp` | `policies/review.yaml` | the same as the reviewer |
+| untrusted input | possibly | `policies/strict.yaml` | No host mount. Use `openshell sandbox cp` to get the output. |
 
-Policies are plain OpenShell YAML, enforced with Landlock. Any path that isn't listed is inaccessible.
+The policies are standard OpenShell YAML files. Landlock enforces them. The agent cannot access a path that the
+policy does not list.
 
-### Providers: network is decided here, not in the persona
+#### Providers: they control the network, not the persona
 
-Egress is deny-by-default. Each `providers/provider-<id>.yaml` is an OpenShell provider profile: the allowed hosts
-and ports, which binaries may use them, and any credentials, which the gateway injects so they never sit in the
-image. Personas only list provider ids. When a role needs a new capability, such as the GitHub API or another
-package registry, add a provider profile first; see [docs/providers.md](openshell/docs/providers.md). Planners deliberately get fewer providers than developers, because
-each extra endpoint is cost and leak surface.
+Egress is denied by default. Each `providers/provider-<id>.yaml` file is an OpenShell provider profile. The profile
+sets:
 
-### Adding a persona
+- The permitted hosts and ports.
+- The binaries that can use these hosts.
+- The credentials. The gateway adds the credentials, so the image never contains them.
 
-1. **Role:** reuse a file in `shared/instructions/roles/`, or write one new file for a new job.
-2. **Payload:** `mkdir -p personas/<name>/payload` and copy a payload from another persona on the same harness.
-3. **Manifest:** write `persona.json` with the harness, image tag, policy, providers, `launch_cmd`, `mount_default`,
-   and `mount_read_only`.
-4. **Containerfile:** copy one from another persona on the same harness and change the role file and payload path.
-5. `./build.sh <name>`, then `./launch.sh <name> --dry-run`. Read the printed command before you run it.
+A persona only lists provider IDs. Planners get fewer providers than developers. Each additional endpoint adds cost
+and adds risk of data leaks.
 
-The full walkthrough is in [docs/personas.md](openshell/docs/personas.md).
+## Reference
 
-Personas are cheap and harnesses are the expensive axis: the five personas here need only two harness builds.
-Adding a skill is cheaper still: drop a directory into `shared/skills/` and rebuild the personas.
+### Providers
 
-> **Flutter / mobile app dev is on hold.** Flutter emulators can't run inside OpenShell sandboxes, so the Flutter
-> personas, skill, role, and pub.dev provider draft were removed. They're still in git history if that changes.
+| Provider | Gives access to |
+|---|---|
+| `bifrost` | Inference (`homelab:8080`) |
+| `context7` | A documentation MCP server |
+| `langfuse` | Traces (the local Langfuse, or `homelab:3000`) |
+| `npm` | The npm registry, read-only |
+| `googlefonts` | Google Fonts, read-only |
+| `vllm`, `ninfer`, `unsloth` | Other inference backends |
+| `launcher` | The route from the factory orchestrator to the launcher on the host |
 
-## Model and inference endpoint
+The file `provider-github.yaml.draft` contains a draft GitHub profile. This profile is not in use yet.
+
+### Model and inference endpoint
 
 pi and omp both send requests to:
 
-- **Endpoint:** `http://homelab:8080/v1/chat/completions`. The persona config sets `baseUrl: http://homelab:8080/v1`
-  with the OpenAI-compatible chat API (`api: openai-completions`), and pi and omp append `/chat/completions` to
-  that. The `bifrost` provider profile allows `homelab:8080`.
+- **Endpoint:** `http://homelab:8080/v1/chat/completions`. The persona configuration sets
+  `baseUrl: http://homelab:8080/v1` and the OpenAI-compatible chat API (`api: openai-completions`). pi and omp add
+  `/chat/completions` to this URL. The `bifrost` provider profile permits `homelab:8080`.
 - **Model:** `Strata/qwen3.8-flash-next-iq3_xxs` (context window 262144). This is the exact `model` value in the
-  request body. Bifrost names models as `provider/model`, so this should route to its `Strata` provider, which
-  serves `qwen3.8-flash-next-iq3_xxs`. That routing hasn't been checked against Bifrost's own config.
+  request body. Bifrost names models as `provider/model`. Thus, Bifrost must send this request to its `Strata`
+  provider, which serves `qwen3.8-flash-next-iq3_xxs`. Nobody has compared this route with the configuration of
+  Bifrost yet.
 
-To change the model, edit the persona payloads: `models.json` and `settings.json` (`defaultModel`) for pi, or
-`models.yml` and `config.yml` for omp. Then rebuild that persona.
-
-## Getting started
-
-### 1. Prerequisites (one time)
-
-- **Podman** with a running machine: `podman machine start`
-- **OpenShell CLI** (tested with 0.1.1): `openshell --version`
-- **node or python3** on the host, because `launch.sh` and `build.sh` use them to read `persona.json`
-- Bind mounts enabled in the gateway config at `~/.config/openshell/gateway.toml`:
-
-  ```toml
-  [openshell.drivers.podman]
-  allow_driver_config = true
-  enable_bind_mounts = true
-  ```
-
-- Bifrost reachable at `homelab:8080` from the Podman VM
-
-### 2. Register providers
-
-```bash
-cd ~/Projects/software-factory/openshell
-make providers                                          # push every providers/provider-*.yaml profile
-openshell provider create --name bifrost --type bifrost # one provider per profile you use
-openshell provider create --name context7 --type context7 --credential CONTEXT7_API_KEY   # reads it from your env
-openshell provider list                                 # check
-```
-
-Providers without credentials (`bifrost`, `npm`, `googlefonts`, `vllm`, `ninfer`) need only `--name` and `--type`.
-For `langfuse`, pass `--credential` for each key that `provider-langfuse.yaml` lists.
-
-### 3. Build images
-
-```bash
-./build.sh                 # harness images (cached) + all personas
-./build.sh pi-web-dev      # one persona; edits to instructions/skills rebuild in seconds
-./build.sh --dry-run       # print the podman commands only
-```
-
-### 4. Add the shell function (run it from anywhere)
-
-Add this to `~/.zshrc` (it also works in `~/.bashrc`):
-
-```sh
-# software-factory: launch a sandboxed agent persona on the current directory
-export SOFTWARE_FACTORY="$HOME/Projects/software-factory"
-
-agent() {
-  local launch="$SOFTWARE_FACTORY/openshell/launch.sh"
-  if [ $# -eq 0 ]; then "$launch" --list; return; fi
-  "$launch" "$@"
-}
-
-agent-build() { "$SOFTWARE_FACTORY/openshell/build.sh" "$@"; }
-
-# zsh: tab-complete persona names
-if [ -n "$ZSH_VERSION" ] && (( $+functions[compdef] )); then
-  _agent() { compadd -- $(command ls "$SOFTWARE_FACTORY/openshell/personas"); }
-  compdef _agent agent agent-build
-fi
-```
-
-Every persona has `mount_default: "."`, which `launch.sh` resolves to `$PWD`. So the directory you're in becomes
-`/sandbox/work` in the sandbox, and the agent starts there.
-
-Reload your shell with `source ~/.zshrc`. Then:
-
-```bash
-agent                                   # list personas
-cd ~/repos/my-next-app
-agent pi-web-dev --dry-run              # print the exact openshell command; read it first
-agent pi-web-dev                        # start pi on this repo, read-write
-agent pi-pr-reviewer                    # same repo, read-only reviewer
-agent pi-planner --mount ~/repos/other  # mount a different directory
-agent pi-general-dev --no-mount         # no host files at all
-agent pi-general-dev -- -p --no-session --mode json "summarise this repo" </dev/null   # headless
-```
-
-### `launch.sh` options
-
-| Flag | Effect |
-|---|---|
-| `--dry-run` | Print the composed `openshell sandbox create …` command and run nothing |
-| `--mount <path>` | Bind-mount this host path at `/sandbox/work` instead of `$PWD` |
-| `--no-mount` | No bind mount. Use this with `--policy policies/strict.yaml`. |
-| `--ro` | Force the mount read-only |
-| `--policy <file>` | Override the persona's policy |
-| `--provider <id>` / `--no-provider` | Add a provider on top of the persona's list, or drop them all |
-| `--name <name>` | Sandbox name (default: the persona name) |
-| `--keep` | Keep the sandbox after the agent exits |
-| `--env K=V` | Pass an environment variable into the sandbox (repeatable) |
-| `-- <args>` | Extra arguments for the agent CLI |
-
-`make` works too: `make list`, `make run-pi-web-dev MOUNT=~/repos/app`, `make dry-pi-planner`.
-
-## Gotchas
-
-- **Headless pi needs stdin closed** (`</dev/null`). Otherwise it waits on stdin forever.
-- pi `--mode json` can exit 0 after a retried model error. Judge success from `agent_settled` and the final `stopReason`.
-- Inside the sandbox, use `http://localhost:PORT`, never `127.0.0.1`, because IPv4 loopback is swallowed.
-- After `pi-web-dev` runs `npm install` in the sandbox, `node_modules` has Linux binaries. Run `npm install` again on the host afterwards.
-- The reviewer needs a GitHub provider to fetch PRs directly. That provider is still a draft.
-
-## Layout
+### Layout
 
 ```
 software-factory/
@@ -344,3 +466,9 @@ software-factory/
 ├── langfuse-source/        git submodule: langfuse/langfuse, pinned release (compose file)
 └── openshell-source/       git submodule: NVIDIA/OpenShell (reference)
 ```
+
+### Flutter and mobile app development
+
+Flutter and mobile app development are on hold. Flutter emulators cannot run in OpenShell sandboxes. Thus, the
+Flutter personas, skill, role, and pub.dev provider draft are removed. The git history keeps them. If this problem
+changes, you can get them again.
