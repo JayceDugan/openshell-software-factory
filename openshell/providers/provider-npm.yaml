@@ -15,4 +15,5 @@ endpoints:
     protocol: rest
     access: read-only
     enforcement: enforce
+    allow_encoded_slash: true   # scoped packages are fetched as /@scope%2fname
 binaries: [/usr/bin/node, /usr/local/bin/node]
