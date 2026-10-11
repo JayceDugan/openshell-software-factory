@@ -7,7 +7,42 @@ bind-mounted into the sandbox, and the agent gets the role, tools, filesystem po
 persona allows.
 
 This is the per-step runtime for a larger software factory: an outer loop (LangGraph) that runs each step in a
-fresh headless sandbox. That orchestrator doesn't exist yet. What this repo has today is the sandboxed agent fleet.
+fresh headless sandbox. The first version of that loop is in [`factory/`](factory/README.md): a LangGraph
+orchestrator, a small host-side launcher that starts persona sandboxes, and self-hosted Langfuse for tracing.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  browser["<b>Browser</b><br/>LangGraph Studio<br/>Langfuse UI"]
+  orch["<b>Orchestrator</b><br/>sandbox · LangGraph :2024<br/>ping → runAgent"]
+  launcher["<b>Launcher</b><br/>host · Rust :8787<br/>holds gateway mTLS"]
+  gateway["<b>OpenShell gateway</b><br/>providers · policies<br/>credential proxy"]
+  agent["<b>Persona sandbox</b><br/>one per step<br/>pi / omp + pi-langfuse"]
+  bifrost["<b>Bifrost</b><br/>homelab:8080"]
+  shell["<b>agent / launch.sh</b><br/>interactive sessions"]
+
+  subgraph langfuse["Langfuse · podman compose"]
+    lfweb["web :3000"] --> stores[("Postgres · ClickHouse<br/>Redis · MinIO")]
+  end
+
+  browser -- "port forward" --> orch
+  orch -- "launcher provider" --> launcher
+  launcher -- "mTLS: create · exec · delete" --> gateway
+  shell --> gateway
+  gateway --> agent
+  agent -- "bifrost provider" --> bifrost
+  orch -- "traces · session = thread id" --> lfweb
+  agent -- "traces · same session" --> lfweb
+```
+
+- **One trusted host process.** Only the launcher talks to the gateway. The orchestrator can ask it to run a
+  persona on a task, but image, policy and providers always come from `persona.json`.
+- **Credentials stay in the gateway.** Sandboxes see placeholders; OpenShell's proxy swaps in the real launcher
+  token and Langfuse keys on the way out, and only to the endpoints each provider allows.
+- **One fresh sandbox per step.** The launcher creates it, runs the agent headless, and deletes it.
+- **Traces are linked by session.** The LangGraph thread id is the Langfuse session for the orchestrator trace and
+  is passed to pi as `--session-id`, so Langfuse > Sessions shows each graph run next to the agent runs it started.
 
 ## What this solves
 
@@ -302,5 +337,10 @@ software-factory/
 │   ├── policies/           dev.yaml, review.yaml, strict.yaml
 │   ├── providers/          OpenShell provider profiles + Makefile
 │   └── shared/             house rules, role files, skills, browser layer
+├── factory/                the LangGraph outer loop (see factory/README.md)
+│   ├── launcher/           Rust host launcher: starts persona sandboxes via the gateway
+│   ├── orchestrator/       TypeScript LangGraph graph, run in its own sandbox
+│   └── langfuse/           podman compose overrides for self-hosted Langfuse
+├── langfuse-source/        git submodule: langfuse/langfuse, pinned release (compose file)
 └── openshell-source/       git submodule: NVIDIA/OpenShell (reference)
 ```
